@@ -117,9 +117,25 @@
     return s.visibility !== 'hidden' && s.display !== 'none';
   }
 
+  /**
+   * querySelectorAll that understands "|>" to step into an (open) shadow root:
+   * "#editor |> .input" = ".input" inside the shadow DOM of "#editor". Chainable.
+   */
+  function queryAllDeep(selector) {
+    const parts = String(selector).split('|>').map((x) => x.trim());
+    if (parts.some((x) => !x)) throw new SyntaxError(`Bad selector "${selector}"`);
+    let scopes = [document];
+    for (let i = 0; i < parts.length; i++) {
+      const found = [];
+      for (const scope of scopes) for (const el of scope.querySelectorAll(parts[i])) found.push(el); // SyntaxError on bad CSS
+      if (i === parts.length - 1) return found;
+      scopes = found.map((el) => el.shadowRoot).filter(Boolean);
+    }
+    return [];
+  }
+
   function findElement(selector) {
-    const all = document.querySelectorAll(selector); // throws SyntaxError on bad selector
-    for (const el of all) if (isVisible(el)) return el;
+    for (const el of queryAllDeep(selector)) if (isVisible(el)) return el;
     return null;
   }
 
@@ -129,7 +145,10 @@
   function findByText(text, scope) {
     const want = normText(text);
     let best = null;
-    for (const el of document.querySelectorAll(scope ? `${scope}, ${scope} *` : 'body *')) {
+    const pool = scope
+      ? queryAllDeep(scope).flatMap((root) => [root, ...(root.shadowRoot || root).querySelectorAll('*')])
+      : document.querySelectorAll('body *');
+    for (const el of pool) {
       if (el.tagName === 'SCRIPT' || el.tagName === 'STYLE') continue;
       if (best && !best.contains(el)) continue; // keep the first match; only go deeper
       if (normText(el.textContent) === want && isVisible(el)) best = el;
@@ -346,7 +365,7 @@
 
   FB.dom = {
     isEditable, deepActiveElement, textBeforeCaret, deleteBeforeCaret, snapshot, restoreValue,
-    insertText, typeText, findElement, findByText, isVisible, waitForElement, simulateClick, pressKey,
+    insertText, typeText, findElement, findByText, queryAllDeep, isVisible, waitForElement, simulateClick, pressKey,
     clearField, selectOption, saveSelection, restoreSelection, execute, sleep, Cancelled,
   };
 })();

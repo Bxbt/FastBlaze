@@ -34,7 +34,7 @@
   }
 
   function countMatches(sel) {
-    try { return document.querySelectorAll(sel).length; } catch { return 0; }
+    try { return FB.dom.queryAllDeep(sel).length; } catch { return 0; }
   }
 
   // tag, plus :nth-of-type when siblings share the tag.
@@ -51,20 +51,21 @@
   }
 
   // Walk up until the path is unique, anchoring on test-id / id ancestors when found.
-  function pathSelector(el) {
+  function pathSelector(el, wrap) {
+    wrap = wrap || ((x) => x);
     const parts = [];
     for (let node = el; node && node.nodeType === 1 && node !== document.documentElement; node = node.parentElement) {
       const anchor = node !== el ? anchorOf(node) : null;
       parts.unshift(anchor || segment(node));
       const sel = parts.join(' > ');
-      if (resolves(sel, el)) return sel;
+      if (resolves(wrap(sel), el)) return wrap(sel);
       if (anchor) {
         // Anchor found but path not unique: try descendant combinator from the anchor.
         const loose = `${anchor} ${parts.slice(1).join(' > ')}`;
-        if (parts.length > 1 && resolves(loose, el)) return loose;
+        if (parts.length > 1 && resolves(wrap(loose), el)) return wrap(loose);
       }
     }
-    return parts.join(' > ');
+    return wrap(parts.join(' > '));
   }
 
   /**
@@ -74,10 +75,24 @@
    * fragile = structural path / utility classes
    */
   function candidates(el) {
+    // Inside a shadow root: build "host |> inner" selectors (text matching skipped).
+    const root = el.getRootNode();
+    if (typeof ShadowRoot !== 'undefined' && root instanceof ShadowRoot) {
+      const hostSel = (candidates(root.host).find((c) => c.selector) || {}).selector;
+      if (!hostSel) return [];
+      return localCandidates(el, (sel) => `${hostSel} |> ${sel}`);
+    }
+    return localCandidates(el, null);
+  }
+
+  function localCandidates(el, wrap) {
     const out = [];
     const tag = el.tagName.toLowerCase();
-    const add = (selector, kind, stability) => {
-      if (!selector || out.some((c) => c.selector === selector && c.text == null)) return;
+    const w = wrap || ((x) => x);
+    const add = (local, kind, stability) => {
+      if (!local) return;
+      const selector = local.includes('|>') ? local : w(local);
+      if (out.some((c) => c.selector === selector && c.text == null)) return;
       if (resolves(selector, el)) out.push({ selector, kind, stability, count: countMatches(selector) });
     };
 
@@ -95,7 +110,7 @@
 
     // Visible text (great for dropdown options / buttons without test ids).
     const text = normText(el.textContent);
-    if (text && text.length <= 40 && !['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName)) {
+    if (!wrap && text && text.length <= 40 && !['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName)) {
       const found = FB.dom.findByText(text);
       if (found && el.contains(found)) out.push({ text, kind: 'text', stability: 'ok', count: 1 });
     }
@@ -111,7 +126,7 @@
 
     const cls = stableClasses(el);
     if (cls) add(`${tag}${cls}`, 'class', 'fragile');
-    add(pathSelector(el), 'path', 'fragile');
+    add(pathSelector(el, w), 'path', 'fragile');
 
     const rank = { stable: 0, ok: 1, fragile: 2 };
     return out.sort((a, b) => rank[a.stability] - rank[b.stability]);

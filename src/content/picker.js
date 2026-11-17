@@ -92,9 +92,20 @@
     session.box.hidden = session.tip.hidden = false;
   }
 
+  // elementFromPoint stops at shadow hosts; keep descending into open shadow roots.
+  function deepElementFromPoint(x, y) {
+    let el = document.elementFromPoint(x, y);
+    while (el && el.shadowRoot) {
+      const inner = el.shadowRoot.elementFromPoint(x, y);
+      if (!inner || inner === el) break;
+      el = inner;
+    }
+    return el;
+  }
+
   function onMove(e) {
     if (isOurs(e)) return;
-    const el = document.elementFromPoint(e.clientX, e.clientY);
+    const el = deepElementFromPoint(e.clientX, e.clientY);
     if (el && el !== session.current && el !== session.host) setCurrent(el);
   }
 
@@ -117,7 +128,7 @@
     if (isOurs(e)) return;
     e.preventDefault();
     e.stopImmediatePropagation();
-    if (e.type === 'click') pick(session.current || e.target);
+    if (e.type === 'click') pick(session.current || deepElementFromPoint(e.clientX, e.clientY) || e.target);
   }
 
   // ---- result panel ----
