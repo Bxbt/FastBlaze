@@ -193,7 +193,8 @@
 
   /**
    * One command per line using "\" continuations. Breaks before a block that
-   * directly follows another block, and before every action command.
+   * directly follows another block, and before every action command, except
+   * {wait} / {key}, which stay next to the step before them.
    * Running the result gives exactly the same output as the input.
    */
   function formatTemplate(src) {
@@ -201,7 +202,9 @@
     let out = '';
     tokens.forEach((t, i) => {
       const prev = tokens[i - 1];
-      if (i > 0 && isBlockToken(t) && (isBlockToken(prev) || t.kind === 'action')) out += '\\\n';
+      // {wait} / {key} stay on the line of the step they belong to.
+      const trailing = t.name === 'wait' || t.name === 'key';
+      if (i > 0 && isBlockToken(t) && !trailing && (isBlockToken(prev) || t.kind === 'action')) out += '\\\n';
       out += t.text;
     });
     return out;

@@ -35,6 +35,16 @@
         </div>
       </label>
       <p class="muted">Short keyboard clicks when a snippet starts, and a soft tick on each automation click. 0 = off.</p>
+      <h4>Test data (safe mode)</h4>
+      <p class="muted">Random phone numbers and bank accounts can belong to real people. When a list below has entries, <code>{thaiphone}</code> / <code>{bankaccount}</code> only use these. One per line.</p>
+      <div class="row allow-row">
+        <label>Allowed phone numbers <span id="s-phones-count" class="muted"></span>
+          <textarea id="s-phones" rows="4" class="mono" spellcheck="false"></textarea>
+        </label>
+        <label>Allowed bank accounts <span id="s-banks-count" class="muted"></span>
+          <textarea id="s-banks" rows="4" class="mono" spellcheck="false"></textarea>
+        </label>
+      </div>
       <h4>Data</h4>
       <p class="muted">Import merges into existing folders (same folder + shortcut is replaced). Export saves every folder as JSON.</p>
       <div class="row data-actions">
@@ -119,6 +129,11 @@
           <div class="editor-main">
             <div class="editor-card">
               <div class="editor-toolbar">
+                <div class="seg seg-sm" role="group" aria-label="Editor view">
+                  <button type="button" id="view-blocks" class="seg-btn" aria-pressed="true" title="Commands as blocks you can drag">Blocks</button>
+                  <button type="button" id="view-code" class="seg-btn" aria-pressed="false" title="Edit the template text">Code</button>
+                </div>
+                <span class="tb-sep"></span>
                 <button type="button" id="fmt-format" class="tb" data-icon="lines" title="Show one command per line (does not change the output)">Format</button>
                 <button type="button" id="fmt-compact" class="tb" data-icon="compact" title="Join everything back into one line">Compact</button>
                 <button type="button" id="insert-pick" class="tb" disabled data-icon="crosshair" title="Use Pick in the popup (Alt+Shift+P) on a page first">Insert picked</button>
@@ -126,7 +141,8 @@
                 <span id="saved" class="muted"></span>
               </div>
               <div id="edit-pane" class="code-scroll">
-                <div id="code-wrap" class="code-wrap">
+                <div id="blocks" class="blocks" tabindex="0" aria-label="Template blocks"></div>
+                <div id="code-wrap" class="code-wrap" hidden>
                   <pre id="code-hl" class="code-hl" aria-hidden="true"></pre>
                   <textarea id="f-text" class="code-input" spellcheck="false" placeholder="Text that will be inserted when the shortcut is typed…"></textarea>
                   <div id="ac" class="ac" role="listbox" hidden></div>

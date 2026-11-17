@@ -92,3 +92,15 @@ test('highlighter treats generators as data', () => {
   const kinds = FB.tokenizeTemplate('{thaiphone}{thainame}{email}{date}{zipcode}{bankaccount}{randomtext}').map((t) => t.kind);
   assert.deepEqual(kinds, Array(7).fill('data'));
 });
+
+test('allow lists: phone and bank only use team-owned values', () => {
+  const testData = { phones: ['0811111111', '0822222222', '021234567'], banks: ['1112223334'] };
+  for (const p of many(() => run('{thaiphone}', { testData }), 100)) assert.ok(['0811111111', '0822222222'].includes(p), p);
+  assert.equal(run('{thaiphone: type=landline}', { testData }), '021234567');
+  assert.equal(run('{thaiphone: prefix=082}', { testData }), '0822222222');
+  assert.match(run('{thaiphone: format=dash}', { testData }), /^08[12]-\d{3}-\d{4}$/);
+  assert.equal(run('{bankaccount}', { testData }), '1112223334');
+  assert.equal(run('{bankaccount: format=dash}', { testData }), '111-2-22333-4');
+  // explicit opt-out
+  assert.match(run('{thaiphone: source=random}', { testData }), /^0[689]\d{8}$/);
+});

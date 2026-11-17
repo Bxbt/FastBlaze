@@ -82,6 +82,17 @@
 
   const SETTINGS_KEY = 'fastblaze.settings';
 
+  /** Accepts an array or text ("081-234-5678, 0812345679\n..."); keeps unique digit strings of the given lengths. */
+  function numberList(v, min, max) {
+    const items = Array.isArray(v) ? v : String(v || '').split(/[\n,;]+/);
+    const out = [];
+    for (const item of items) {
+      const d = String(item).replace(/\D/g, '');
+      if (d.length >= min && d.length <= max && !out.includes(d)) out.push(d);
+    }
+    return out;
+  }
+
   function normalizeSettings(s) {
     const d = FB.DEFAULT_SETTINGS;
     const num = (v, def, min, max) => {
@@ -94,6 +105,8 @@
       stepDelay: num(s.stepDelay, d.stepDelay, 0, 5000),
       timeout: num(s.timeout, d.timeout, 500, 60000),
       soundVolume: num(s.soundVolume, d.soundVolume, 0, 100),
+      phoneAllow: numberList(s.phoneAllow, 9, 10),
+      bankAllow: numberList(s.bankAllow, 10, 12),
     };
   }
 

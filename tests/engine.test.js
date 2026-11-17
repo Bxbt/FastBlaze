@@ -154,14 +154,15 @@ test('describeAction labels every action type', () => {
 test('settings are normalized and clamped', () => {
   require('../src/shared/defaults.js');
   require('../src/shared/storage.js');
-  assert.deepEqual(FB.storage.normalizeSettings(), { highlight: true, stepDelay: 60, timeout: 5000, soundVolume: 40 });
+  assert.deepEqual(FB.storage.normalizeSettings(), { highlight: true, stepDelay: 60, timeout: 5000, soundVolume: 40, phoneAllow: [], bankAllow: [] });
   assert.deepEqual(
     FB.storage.normalizeSettings({ highlight: false, stepDelay: -5, timeout: 'abc' }),
-    { highlight: false, stepDelay: 0, timeout: 5000, soundVolume: 40 },
+    { highlight: false, stepDelay: 0, timeout: 5000, soundVolume: 40, phoneAllow: [], bankAllow: [] },
   );
   assert.equal(FB.storage.normalizeSettings({ timeout: 999999 }).timeout, 60000);
   assert.equal(FB.storage.normalizeSettings({ soundVolume: 150 }).soundVolume, 100);
   assert.equal(FB.storage.normalizeSettings({ soundVolume: 0 }).soundVolume, 0);
+  assert.deepEqual(FB.storage.normalizeSettings({ phoneAllow: '081-111-1111\n0811111111, 12, 021234567' }).phoneAllow, ['0811111111', '021234567']);
 });
 
 test('formmenu options and thaiid command', () => {
@@ -196,6 +197,8 @@ test('format puts one command per line and runs identically', () => {
   assert.deepEqual(plain(FB.compile(formatted).actions), plain(FB.compile(src).actions));
   assert.equal(FB.compactTemplate(formatted), src);
   assert.equal(FB.formatTemplate(formatted), formatted); // idempotent
+  // wait / key stay on the same line as the previous step
+  assert.equal(FB.formatTemplate('{click: selector=#a}{wait: 1s}{click: selector=#b}{key: enter}'), '{click: selector=#a}{wait: 1s}\\\n{click: selector=#b}{key: enter}');
   // plain sentence with a field is not broken up
   assert.equal(FB.formatTemplate('Hello {formtext: name=x} bye'), 'Hello {formtext: name=x} bye');
 });

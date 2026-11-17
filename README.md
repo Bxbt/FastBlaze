@@ -23,6 +23,10 @@ After editing code: click ↻ on the extension card, then reload the page.
 - **Pick** (popup button or `Alt+Shift+P`): hover an element (yellow box), click it
   to get ranked selectors (stable / ok / fragile). The best command is copied and
   available as **Insert picked** in the editor. `↑`/`↓` = parent/child, `Esc` = cancel.
+- **Blocks** view (default): each command is a chip (icon + key values), text is a
+  dashed chip. Drag chips to reorder, click a command chip to edit it in the panel
+  (Update), click text to edit in place, × or Delete to remove. **Code** view shows the
+  raw template with syntax highlight.
 - Options page: welcome page with a try-out box. Snippet editor with Label / Shortcut
   fields, **Try it out** popover, **Edit / Preview** switch, syntax-highlighted
   template, **Format** (one command per line using `\` line continuations, same
@@ -36,6 +40,9 @@ After editing code: click ↻ on the extension card, then reload the page.
   (new snippet, rename, sort, disable/enable, delete) and snippets (duplicate,
   move to folder, rename, delete). Disabled folders are listed separately and
   their shortcuts stop expanding.
+- **Test data safe mode**: Settings has allow lists for phone numbers and bank
+  accounts. When filled, `{thaiphone}` / `{bankaccount}` only use those values;
+  `source=random` opts out (the form warns that random values may belong to real people).
 - Settings: highlight on/off, pause per step, element timeout, key-click sound volume
   (snippet start + each automation click; 0 = off), Import / Export JSON.
   Appearance switch (System / Light / Dark) in the header.
@@ -48,7 +55,7 @@ After editing code: click ↻ on the extension card, then reload the page.
 |---|---|
 | `{thaiid}` / `{thaiid: prefix=8; format=dash}` | Valid Thai ID (test data) |
 | `{random-number: min=0; max=9}` | Random integer (`rounded=no` → decimal) |
-| `{thaiphone}` / `{thaiphone: type=landline; format=dash; prefix=064}` | Thai mobile (06/08/09) or landline number |
+| `{thaiphone}` / `{thaiphone: type=landline; format=dash; prefix=064; source=random}` | From the Settings allow list; random Thai mobile / landline only when the list is empty or `source=random` |
 | `{thainame}` / `{thainame: part=first; gender=male; lang=en; title=yes}` | Thai (or romanized) first / last / full name, optional นาย / นางสาว |
 | `{email}` / `{email: base=qa; domain=example.com}` | Unique test address (default `example.com`, never delivers) |
 | `{date}` / `{date: age=20-40; format=DDMMBBBB}` / `{date: shift=-3d}` | Today, shifted, or random birthday for an age range. Tokens: `BBBB`/`BB` พ.ศ., `YYYY`/`YY` ค.ศ., `MMMM`/`MMM` Thai month, `MM`, `DD` |

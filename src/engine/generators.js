@@ -13,7 +13,13 @@
     opts = opts || {};
     const type = opts.type === 'landline' ? 'landline' : 'mobile';
     let n;
-    if (opts.prefix) {
+    const allow = (opts.allow || []).map((x) => String(x).replace(/\D/g, '')).filter(Boolean);
+    if (allow.length && opts.source !== 'random') {
+      // Safe mode: only numbers the team owns. Prefer the requested type when possible.
+      const fit = allow.filter((x) => (type === 'landline' ? x.length === 9 : x.length === 10))
+        .filter((x) => !opts.prefix || x.startsWith(String(opts.prefix).replace(/\D/g, '')));
+      n = pick(fit.length ? fit : allow);
+    } else if (opts.prefix) {
       const p = String(opts.prefix).replace(/\D/g, '');
       n = p + digits(Math.max(0, (type === 'landline' ? 9 : 10) - p.length));
     } else if (type === 'landline') {
@@ -95,8 +101,10 @@
   }
 
   function bankAccount(opts) {
-    const n = `${randInt(1, 9)}${digits(9)}`;
-    return opts && opts.format === 'dash' ? `${n.slice(0, 3)}-${n[3]}-${n.slice(4, 9)}-${n[9]}` : n;
+    opts = opts || {};
+    const allow = (opts.allow || []).map((x) => String(x).replace(/\D/g, '')).filter(Boolean);
+    const n = allow.length && opts.source !== 'random' ? pick(allow) : `${randInt(1, 9)}${digits(9)}`;
+    return opts.format === 'dash' && n.length === 10 ? `${n.slice(0, 3)}-${n[3]}-${n.slice(4, 9)}-${n[9]}` : n;
   }
 
   // ---- dates ----------------------------------------------------------------

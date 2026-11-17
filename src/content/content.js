@@ -134,7 +134,8 @@
         FB.dom.restoreSelection(saved);
         if (!formValues) return;
       }
-      const { actions, errors } = FB.compile(snippet.text, { lookup, formValues });
+      const testData = { phones: settings.phoneAllow, banks: settings.bankAllow };
+      const { actions, errors } = FB.compile(snippet.text, { lookup, formValues, testData });
       if (errors.length) FB.ui.toast(`FastBlaze — template errors:\n${errors.join('\n')}`, 'error');
 
       const run = { cancelled: false };
