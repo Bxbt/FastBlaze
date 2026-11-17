@@ -123,7 +123,7 @@
     return nodes;
   }
 
-  const ACTION_CMDS = new Set(['click', 'select', 'clear', 'wait', 'key']);
+  const ACTION_CMDS = new Set(['click', 'select', 'clear', 'wait', 'key', 'waitfor']);
   const FORM_CMDS = new Set(['formtext', 'formmenu', 'formparagraph']);
   const DATA_CMDS = new Set(['thaiid', 'random-number', 'thaiphone', 'thainame', 'email', 'date', 'zipcode', 'bankaccount', 'randomtext']);
 
@@ -203,7 +203,7 @@
       // New line before every element action ({click} / {select}) and between
       // consecutive variable assignments. Everything else ({clear}, {wait}, {key},
       // fields, generators...) stays on the line of the step it belongs to.
-      const stepStart = t.name === 'click' || t.name === 'select';
+      const stepStart = t.name === 'click' || t.name === 'select' || t.name === 'waitfor';
       const assignRun = t.node && t.node.type === 'assign' && isBlockToken(prev);
       if (i > 0 && isBlockToken(t) && (stepStart || assignRun)) out += '\\\n';
       out += t.text;

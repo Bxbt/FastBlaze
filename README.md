@@ -23,6 +23,7 @@ After editing code: click ↻ on the extension card, then reload the page.
 - **Record** (popup button, or **Record from website** in the Manage page commands):
   clicks, typing, native dropdown choices and Enter/Escape become steps; recording
   survives page loads. Password values are never stored (a `{formtext}` is used).
+  Pauses longer than 3 s are recorded as `{wait: idle}`.
   **Stop & save** turns typed Thai IDs / phones / emails into generators (toggle
   "Test data"). From the popup it creates a snippet in the *Recorded* folder and
   opens it; from the Manage page the steps are inserted at the cursor.
@@ -76,6 +77,9 @@ After editing code: click ↻ on the extension card, then reload the page.
 | `{click: selector=CSS}` | Wait ≤5s for visible element, click; following text types into focus |
 | `{click: text=Label}` | Click element whose visible text equals Label (`selector=` narrows the search) |
 | `{click: …; maxdelay=3s}` | Wait up to this long for the element (default: Settings) |
+| (all clicks) | Wait until the element is **really clickable**: visible, enabled, not covered, not moving; re-found if the page re-renders it. `force=yes` skips the checks |
+| `{waitfor: selector=.result}` / `{waitfor: selector=.spinner; state=gone}` / `{waitfor: text=บันทึกสำเร็จ}` | Wait until something appears / disappears (no click) |
+| `{wait: idle}` | Wait until the page stops changing (300 ms quiet, max 10 s) instead of guessing a delay |
 | `{clear}` / `{clear: selector=CSS}` | Empty focused (or matched) field before typing |
 | `{select: selector=CSS; value=10}` | Native `<select>` by `value=`, `text=` or `index=` |
 | `{wait: 500ms}` `{key: enter\|tab\|escape\|up\|down}` | Pause / key press |

@@ -40,6 +40,7 @@
     sigma: '<path d="M18 6V4H6l6 8-6 8h12v-2"/>',
     cursor: '<path d="M9 4h6M9 20h6M12 4v16"/>',
     chevron: '<path d="m6 9 6 6 6-6"/>',
+    hourglass: '<path d="M6 3h12M6 21h12M7 3c0 5 10 5 10 9s-10 4-10 9M17 3c0 5-10 5-10 9s10 4 10 9"/>',
     record: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4" fill="currentColor"/>',
     phone: '<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/>',
     user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>',

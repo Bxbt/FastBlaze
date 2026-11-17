@@ -43,6 +43,14 @@
 
   // ---- step bookkeeping ----
   function push(step, label) {
+    // The user paused (page loading, animation): replay waits for the page to settle.
+    const now = Date.now();
+    if (rec.lastStepAt && now - rec.lastStepAt > 3000 && rec.count > 0 && step.type !== 'type') {
+      rec.count++;
+      rec.local.push({ type: 'idle' });
+      send({ type: 'fastblaze:rec-step', step: { type: 'idle' } });
+    }
+    rec.lastStepAt = now;
     rec.count++;
     rec.local.push(step);
     send({ type: 'fastblaze:rec-step', step });
@@ -192,7 +200,7 @@
   function begin(opts) {
     if (rec) return;
     opts = opts || {};
-    rec = { count: opts.count || 0, local: [], pending: null, initial: new WeakMap(), lastClickEl: null, lastClickAt: 0, labelClick: null, bar: null };
+    rec = { count: opts.count || 0, local: [], pending: null, initial: new WeakMap(), lastClickEl: null, lastClickAt: 0, lastStepAt: 0, labelClick: null, bar: null };
     for (const [type, fn] of LISTENERS) window.addEventListener(type, fn, true);
     window.addEventListener('pagehide', onPageHide);
     showBar();

@@ -39,6 +39,12 @@
 - [x] `{click: text=...}` คลิกตามข้อความที่เห็น (เหมาะกับตัวเลือกใน dropdown)
 - [x] สีหน้า Manage/popup ตาม CI ของ logo + สลับ Appearance (System / Light / Dark)
 
+## Smart wait (หลัง Phase 4)
+
+- [x] `{click}` รอจนคลิกได้จริง (มองเห็น, ไม่ disabled, ไม่ถูกบัง, ตำแหน่งนิ่ง) + หาใหม่ถ้าถูก re-render
+- [x] `{waitfor: selector=…}` / `state=gone` / `text=…` รอโดยไม่คลิก
+- [x] `{wait: idle}` รอจนหน้านิ่ง แทนการเดา delay; Record ใส่ให้เองเมื่อผู้ใช้หยุดรอเกิน 3 วินาที
+
 ## Phase 4 — Record mode (~2–3 วัน)
 
 - [x] กดอัด → ทำงานบนเว็บตามปกติ → กดหยุด → ได้ snippet ทั้ง flow (popup หรือหน้า Manage)

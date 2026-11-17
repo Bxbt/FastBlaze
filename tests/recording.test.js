@@ -63,3 +63,8 @@ test('selectors with ; or braces stay intact', () => {
   const tpl = build([{ type: 'click', selector: sel }]);
   assert.equal(FB.compile(tpl).actions[0].selector, sel);
 });
+
+test('pauses become {wait: idle}', () => {
+  assert.equal(build([{ type: 'click', selector: '#a' }, { type: 'idle' }, { type: 'click', selector: '#b' }]),
+    '{click: selector=#a}{wait: idle}{click: selector=#b}');
+});

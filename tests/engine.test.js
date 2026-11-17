@@ -215,3 +215,20 @@ test('click maxdelay sets a per-step timeout', () => {
   assert.deepEqual(r.actions.map((a) => a.timeout), [3000, 750, undefined]);
   assert.match(FB.compile('{click: selector=#a; maxdelay=soon}').errors[0], /Bad delay/);
 });
+
+test('smart waits: waitfor, wait idle, click force', () => {
+  const r = FB.compile('{waitfor: selector=.result}{waitfor: selector=.spinner; state=gone; maxdelay=20s}{waitfor: text=บันทึกสำเร็จ}{wait: idle}{wait: idle; quiet=500ms; maxdelay=5s}{click: selector=#a; force=yes}');
+  assert.deepEqual(r.errors, []);
+  assert.deepEqual(plain(r.actions), [
+    { type: 'waitfor', selector: '.result', state: 'visible' },
+    { type: 'waitfor', selector: '.spinner', state: 'gone', timeout: 20000 },
+    { type: 'waitfor', selector: null, state: 'visible', text: 'บันทึกสำเร็จ' },
+    { type: 'idle', quiet: 300, timeout: 10000 },
+    { type: 'idle', quiet: 500, timeout: 5000 },
+    { type: 'click', selector: '#a', force: true },
+  ]);
+  assert.equal(FB.describeAction(r.actions[1]), 'wait until .spinner is gone');
+  assert.match(FB.compile('{waitfor: selector=#x; state=soon}').errors[0], /visible or gone/);
+  assert.match(FB.compile('{waitfor}').errors[0], /selector= or text=/);
+  assert.equal(FB.tokenizeTemplate('{waitfor: selector=#x}')[0].kind, 'action');
+});

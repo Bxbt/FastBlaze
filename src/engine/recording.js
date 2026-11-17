@@ -5,6 +5,7 @@
 //   { type: 'type', value, clear?, secret?, field? }  value typed into the focused field
 //   { type: 'select', selector, text }            native <select>
 //   { type: 'key', key }                          enter | escape
+//   { type: 'idle' }                             user paused: wait until the page settles
 (function () {
   'use strict';
   const FB = (globalThis.FastBlaze = globalThis.FastBlaze || {});
@@ -32,6 +33,8 @@
         return `{select: selector=${tplArg(step.selector)}; text=${tplArg(step.text)}}`;
       case 'key':
         return `{key: ${step.key}}`;
+      case 'idle':
+        return '{wait: idle}';
       case 'type': {
         const clear = step.clear ? '{clear}' : '';
         if (step.secret) return `${clear}{formtext: name=${tplArg(step.field || 'Password')}}`;

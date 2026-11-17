@@ -186,6 +186,108 @@
     }
   }
 
+  // ---- "really clickable" checks ----------------------------------------------
+  const isOurUi = (n) => !!n && n.nodeType === 1 && n.closest && n.closest('fastblaze-ui');
+
+  function deepElementAt(x, y) {
+    let el = document.elementFromPoint(x, y);
+    while (el && el.shadowRoot) {
+      const inner = el.shadowRoot.elementFromPoint(x, y);
+      if (!inner || inner === el) break;
+      el = inner;
+    }
+    return el;
+  }
+
+  const containsDeep = (outer, inner) => {
+    for (let n = inner; n; n = n.parentElement || (n.getRootNode() instanceof ShadowRoot ? n.getRootNode().host : null)) {
+      if (n === outer) return true;
+    }
+    return false;
+  };
+
+  /** null when the element can be clicked now, otherwise a short reason. */
+  function notClickableReason(el) {
+    if (!el.isConnected) return 'it was replaced on the page';
+    if (!isVisible(el)) return 'it is hidden';
+    if (el.disabled || el.getAttribute('aria-disabled') === 'true' || el.closest('[inert], fieldset[disabled]')) return 'it is disabled';
+    if (getComputedStyle(el).pointerEvents === 'none') return 'it does not accept clicks yet';
+    const r = el.getBoundingClientRect();
+    const x = r.left + Math.min(r.width / 2, Math.max(1, r.width - 1));
+    const y = r.top + Math.min(r.height / 2, Math.max(1, r.height - 1));
+    if (x < 0 || y < 0 || x > innerWidth || y > innerHeight) return 'it is off screen';
+    const hit = deepElementAt(x, y);
+    if (hit && !isOurUi(hit) && hit !== el && !containsDeep(el, hit) && !containsDeep(hit, el)) {
+      const who = hit.id ? `#${hit.id}` : `<${hit.tagName.toLowerCase()}${hit.classList[0] ? ` .${hit.classList[0]}` : ''}>`;
+      return `it is covered by ${who}`;
+    }
+    return null;
+  }
+
+  /**
+   * Wait until the element exists AND can be clicked: visible, enabled, not covered,
+   * and not moving (same position on two checks in a row, so animations finish).
+   */
+  async function waitForClickable(selector, timeout, run, text) {
+    const until = Date.now() + timeout;
+    const label = text != null ? `text "${text}"${selector ? ` in ${selector}` : ''}` : selector;
+    let lastRect = null;
+    let scrolled = null;
+    let reason = 'not found';
+    for (;;) {
+      if (run && run.cancelled) throw new Cancelled();
+      const el = text != null ? findByText(text, selector) : findElement(selector);
+      if (el) {
+        if (scrolled !== el) { el.scrollIntoView({ block: 'center', inline: 'nearest' }); scrolled = el; lastRect = null; }
+        const r = el.getBoundingClientRect();
+        const still = lastRect && Math.abs(r.left - lastRect.left) < 1 && Math.abs(r.top - lastRect.top) < 1
+          && Math.abs(r.width - lastRect.width) < 1 && Math.abs(r.height - lastRect.height) < 1;
+        lastRect = r;
+        reason = notClickableReason(el) || (still ? null : 'it is still moving');
+        if (!reason) return el;
+      } else reason = 'not found';
+      if (Date.now() > until) {
+        throw new Error(reason === 'not found'
+          ? `Element not found after ${timeout / 1000}s: ${label}`
+          : `Element found but not clickable after ${timeout / 1000}s (${reason}): ${label}`);
+      }
+      await sleep(text != null ? 100 : 50);
+    }
+  }
+
+  /** {waitfor}: until something is visible (state=visible) or no longer visible (state=gone). */
+  async function waitForState(a, timeout, run) {
+    const until = Date.now() + timeout;
+    const label = a.text != null ? `text "${a.text}"` : a.selector;
+    for (;;) {
+      if (run && run.cancelled) throw new Cancelled();
+      const el = a.text != null ? findByText(a.text, a.selector) : findElement(a.selector);
+      if (a.state === 'gone' ? !el : !!el) return el;
+      if (Date.now() > until) {
+        throw new Error(a.state === 'gone' ? `Still visible after ${timeout / 1000}s: ${label}` : `Did not appear within ${timeout / 1000}s: ${label}`);
+      }
+      await sleep(a.text != null ? 100 : 50);
+    }
+  }
+
+  /** {wait: idle}: resolves once the page has had no DOM changes for `quiet` ms (gives up at `timeout`). */
+  function waitForIdle(quiet, timeout, run) {
+    return new Promise((resolve, reject) => {
+      let last = Date.now();
+      const start = last;
+      const obs = new MutationObserver((records) => {
+        // Our own UI (progress panel, highlights) does not count.
+        if (records.some((r) => !isOurUi(r.target) && ![...r.addedNodes, ...r.removedNodes].every((n) => n.nodeName === 'FASTBLAZE-UI'))) last = Date.now();
+      });
+      obs.observe(document.documentElement, { subtree: true, childList: true, attributes: true, characterData: true });
+      const timer = setInterval(() => {
+        const now = Date.now();
+        if (run && run.cancelled) { done(); reject(new Cancelled()); } else if (now - last >= quiet || now - start >= timeout) { done(); resolve(); }
+      }, 50);
+      function done() { clearInterval(timer); obs.disconnect(); }
+    });
+  }
+
   function clearField(el) {
     if (!isEditable(el)) throw new Error('Not a text field (nothing to clear)');
     el.focus({ preventScroll: true });
@@ -322,11 +424,25 @@
             el = deepActiveElement();
             typeText(a.value, automation);
             break;
-          case 'click':
-            el = await waitForElement(a.selector, a.timeout ?? timeout, run, a.text);
-            mark(el);
+          case 'click': {
+            // Wait until really clickable; if the page re-renders the element right
+            // before the click, find it again (up to 3 tries).
+            const wait = a.force ? waitForElement : waitForClickable;
+            for (let attempt = 1; ; attempt++) {
+              el = await wait(a.selector, a.timeout ?? timeout, run, a.text);
+              mark(el);
+              if (el.isConnected || attempt >= 3) break;
+            }
             simulateClick(el);
             await pause(stepDelay, run);
+            break;
+          }
+          case 'waitfor':
+            el = await waitForState(a, a.timeout ?? timeout, run);
+            if (el) mark(el);
+            break;
+          case 'idle':
+            await waitForIdle(a.quiet, a.timeout, run);
             break;
           case 'wait':
             await pause(a.ms, run);
