@@ -40,6 +40,13 @@
     sigma: '<path d="M18 6V4H6l6 8-6 8h12v-2"/>',
     cursor: '<path d="M9 4h6M9 20h6M12 4v16"/>',
     chevron: '<path d="m6 9 6 6 6-6"/>',
+    phone: '<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/>',
+    user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>',
+    mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>',
+    calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4M12 14h.01M8 14h.01M16 14h.01M8 17h.01M12 17h.01"/>',
+    pin: '<path d="M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/>',
+    bank: '<path d="M3 10 12 4l9 6M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 21h18"/>',
+    text: '<path d="M4 7V5h16v2M12 5v14M9 19h6"/>',
     back: '<path d="M19 12H5M11 18l-6-6 6-6"/>',
     help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17h.01"/>',
   };

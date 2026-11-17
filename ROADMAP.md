@@ -1,6 +1,6 @@
 # FastBlaze Roadmap
 
-สถานะ: v0.4 — Phase 1 + 2 + 3 เสร็จ (flow เสถียร, settings, logo, element picker, theme)
+สถานะ: v0.5 — Phase 1 + 2 + 3 + 5 เสร็จ (flow เสถียร, settings, logo, element picker, theme)
 ลำดับด้านล่างเรียงตาม "คุ้มค่า / แรงที่ใช้" — ทำทีละ phase, แต่ละ phase ใช้งานได้จริงเมื่อจบ
 
 ---
@@ -48,8 +48,8 @@
 
 ## Phase 5 — Test data generators (~0.5 วัน)
 
-- [ ] `{thaiphone}` เบอร์มือถือ 06/08/09, `{thainame}` ชื่อ-นามสกุลไทยสุ่ม, `{email}`
-- [ ] `{date: format=DDMMYYYY; era=be; shift=-25y}` รองรับปี พ.ศ. (ใช้กับ date-of-birth)
+- [x] `{thaiphone}` เบอร์มือถือ/บ้าน, `{thainame}` ชื่อ-นามสกุลไทย (+อังกฤษ, คำนำหน้า), `{email}`, `{zipcode}`, `{bankaccount}`, `{randomtext}`
+- [x] `{date: age=20-40; format=DDMMBBBB}` / `shift=-3d` รองรับปี พ.ศ. และชื่อเดือนไทย
 - [ ] `{clipboard}`, `{cursor}`
 
 ## Phase 6 — Data & การแชร์ (~0.5–1 วัน)

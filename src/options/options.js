@@ -763,7 +763,7 @@
       build: (v) => `{wait: ${Number(v.amount)}${v.unit}}`,
     },
     {
-      id: 'formtext', group: 'Forms', frequent: true, icon: 'textfield', title: 'Text field',
+      id: 'formtext', group: 'Forms', icon: 'textfield', title: 'Text field',
       desc: 'Ask for a value before inserting', keywords: 'form input ask prompt',
       fields: [
         { key: 'name', label: 'Field name', required: true },
@@ -794,7 +794,7 @@
       build: (v) => `{formparagraph: name=${tplArg(v.name)}${v.default ? `; default=${tplArg(v.default)}` : ''}}`,
     },
     {
-      id: 'thaiid', group: 'Data', frequent: true, icon: 'idcard', title: 'Thai ID (test)',
+      id: 'thaiid', group: 'Test data', frequent: true, icon: 'idcard', title: 'Thai ID (test)',
       desc: 'Random 13-digit ID with a valid check digit', keywords: 'id card citizen number',
       fields: [
         { key: 'prefix', label: 'First digit', type: 'select', value: '8',
@@ -807,7 +807,98 @@
       },
     },
     {
-      id: 'random', group: 'Data', icon: 'dice', title: 'Random number',
+      id: 'thaiphone', group: 'Test data', icon: 'phone', title: 'Phone number',
+      desc: 'Thai mobile (06/08/09) or landline number', keywords: 'phone mobile tel เบอร์',
+      fields: [
+        { key: 'type', label: 'Type', type: 'select', options: [['mobile', 'Mobile (10 digits)'], ['landline', 'Landline (9 digits)']], value: 'mobile' },
+        { key: 'format', label: 'Format', type: 'select', options: [['plain', '0812345678'], ['dash', '081-234-5678']], value: 'plain' },
+        { key: 'prefix', label: 'Starts with (optional)', mono: true, desc: 'Digits to keep at the start, e.g. 064. The rest is random.' },
+      ],
+      build: (v) => {
+        const args = [v.type === 'landline' ? 'type=landline' : '', v.format === 'dash' ? 'format=dash' : '', v.prefix ? `prefix=${v.prefix.replace(/\D/g, '')}` : ''].filter(Boolean);
+        return args.length ? `{thaiphone: ${args.join('; ')}}` : '{thaiphone}';
+      },
+    },
+    {
+      id: 'thainame', group: 'Test data', frequent: true, icon: 'user', title: 'Thai name',
+      desc: 'Random first name, last name or full name', keywords: 'name person ชื่อ นามสกุล',
+      fields: [
+        { key: 'part', label: 'Part', type: 'select', options: [['full', 'Full name'], ['first', 'First name'], ['last', 'Last name']], value: 'full' },
+        { key: 'gender', label: 'Gender', type: 'select', options: [['any', 'Any'], ['male', 'Male'], ['female', 'Female']], value: 'any', show: (v) => v.part !== 'last' },
+        { key: 'lang', label: 'Language', type: 'select', options: [['th', 'Thai (สมชาย)'], ['en', 'English (Somchai)']], value: 'th' },
+        { key: 'title', label: 'Title', type: 'select', options: [['no', 'No title'], ['yes', 'With title (นาย / นางสาว)']], value: 'no', show: (v) => v.part !== 'last' },
+      ],
+      build: (v) => {
+        const args = [v.part !== 'full' ? `part=${v.part}` : '', v.part !== 'last' && v.gender !== 'any' ? `gender=${v.gender}` : '',
+          v.lang === 'en' ? 'lang=en' : '', v.part !== 'last' && v.title === 'yes' ? 'title=yes' : ''].filter(Boolean);
+        return args.length ? `{thainame: ${args.join('; ')}}` : '{thainame}';
+      },
+    },
+    {
+      id: 'email', group: 'Test data', icon: 'mail', title: 'Email',
+      desc: 'Unique test address on a test domain', keywords: 'email mail address',
+      fields: [
+        { key: 'base', label: 'Name part', value: 'test', mono: true, desc: 'Result looks like test.abcdef12@example.com' },
+        { key: 'domain', label: 'Domain', value: 'example.com', mono: true, desc: 'example.com never delivers mail, so it is safe for tests.' },
+      ],
+      build: (v) => {
+        const args = [v.base && v.base !== 'test' ? `base=${tplArg(v.base)}` : '', v.domain && v.domain !== 'example.com' ? `domain=${tplArg(v.domain)}` : ''].filter(Boolean);
+        return args.length ? `{email: ${args.join('; ')}}` : '{email}';
+      },
+    },
+    {
+      id: 'date', group: 'Test data', frequent: true, icon: 'calendar', title: 'Date',
+      desc: 'Today, a shifted date, or a birthday for an age range', keywords: 'date birthday วันเกิด วันที่ พ.ศ.',
+      fields: [
+        { key: 'mode', label: 'Which date', type: 'select', value: 'age',
+          options: [['today', 'Today'], ['shift', 'Before / after today'], ['age', 'Birthday for an age range']] },
+        { key: 'amount', label: 'Shift', short: 'Amount', type: 'number', value: '1', row: 'shift', show: (v) => v.mode === 'shift' },
+        { key: 'unit', label: 'Unit', type: 'select', row: 'shift', show: (v) => v.mode === 'shift', value: 'd',
+          options: [['d', 'Days'], ['w', 'Weeks'], ['m', 'Months'], ['y', 'Years']] },
+        { key: 'dir', label: 'Direction', type: 'select', show: (v) => v.mode === 'shift', value: '-',
+          options: [['-', 'Ago (in the past)'], ['+', 'From now (in the future)']] },
+        { key: 'ageMin', label: 'Age', short: 'From', type: 'number', value: '20', row: 'age', show: (v) => v.mode === 'age', required: true,
+          desc: 'A random birthday so the person is between these ages today.' },
+        { key: 'ageMax', label: 'To', type: 'number', value: '40', row: 'age', show: (v) => v.mode === 'age', required: true },
+        { key: 'format', label: 'Format', type: 'select', value: 'DDMMBBBB',
+          options: [['DDMMBBBB', '24052545 (DDMMBBBB, พ.ศ.)'], ['DD/MM/BBBB', '24/05/2545 (พ.ศ.)'], ['DD/MM/YYYY', '24/05/2002 (ค.ศ.)'],
+            ['YYYY-MM-DD', '2002-05-24 (ISO)'], ['D MMMM BBBB', '24 พฤษภาคม 2545'], ['D MMM BB', '24 พ.ค. 45'], ['custom', 'Custom…']] },
+        { key: 'custom', label: 'Custom format', mono: true, required: true, show: (v) => v.format === 'custom', value: 'DD/MM/BBBB',
+          desc: 'BBBB/BB = Buddhist year, YYYY/YY = AD year, MMMM/MMM = Thai month, MM/M = month, DD/D = day.' },
+      ],
+      build: (v) => {
+        const fmt = v.format === 'custom' ? v.custom : v.format;
+        const args = [];
+        if (v.mode === 'shift') args.push(`shift=${v.dir}${Math.abs(Number(v.amount) || 0)}${v.unit}`);
+        if (v.mode === 'age') args.push(`age=${Number(v.ageMin)}${Number(v.ageMax) !== Number(v.ageMin) ? `-${Number(v.ageMax)}` : ''}`);
+        if (fmt && fmt !== 'DD/MM/BBBB') args.push(`format=${tplArg(fmt)}`);
+        return args.length ? `{date: ${args.join('; ')}}` : '{date}';
+      },
+    },
+    {
+      id: 'zipcode', group: 'Test data', icon: 'pin', title: 'Zip code',
+      desc: 'Thai postal code with a real province prefix', keywords: 'zip postal postcode รหัสไปรษณีย์',
+      fields: [],
+      build: () => '{zipcode}',
+    },
+    {
+      id: 'bankaccount', group: 'Test data', icon: 'bank', title: 'Bank account',
+      desc: '10-digit account number', keywords: 'bank account บัญชี',
+      fields: [{ key: 'format', label: 'Format', type: 'select', options: [['plain', '1234567890'], ['dash', '123-4-56789-0']], value: 'plain' }],
+      build: (v) => (v.format === 'dash' ? '{bankaccount: format=dash}' : '{bankaccount}'),
+    },
+    {
+      id: 'randomtext', group: 'Test data', icon: 'text', title: 'Random text',
+      desc: 'Random letters, digits or Thai characters', keywords: 'random string text password code',
+      fields: [
+        { key: 'length', label: 'Length', type: 'number', value: '8', required: true },
+        { key: 'type', label: 'Characters', type: 'select', value: 'alnum',
+          options: [['alnum', 'Letters and digits'], ['letters', 'Letters'], ['lower', 'Lowercase'], ['upper', 'Uppercase'], ['digits', 'Digits'], ['thai', 'Thai letters']] },
+      ],
+      build: (v) => `{randomtext: length=${Number(v.length)}${v.type !== 'alnum' ? `; type=${v.type}` : ''}}`,
+    },
+    {
+      id: 'random', group: 'Test data', icon: 'dice', title: 'Random number',
       desc: 'A random number in a range', keywords: 'random number digit',
       fields: [
         { key: 'min', label: 'Range', short: 'Min', type: 'number', required: true, value: '0', row: 'range' },
@@ -817,13 +908,13 @@
       build: (v) => `{random-number: min=${Number(v.min)}; max=${Number(v.max)}${v.kind === 'decimal' ? '; rounded=no' : ''}}`,
     },
     {
-      id: 'import', group: 'Data', frequent: true, icon: 'fileplus', title: 'Import snippet',
+      id: 'import', group: 'Snippets & logic', frequent: true, icon: 'fileplus', title: 'Import snippet',
       desc: 'Embed another snippet', keywords: 'include reuse embed',
       fields: [{ key: 'shortcut', label: 'Snippet', type: 'select', options: snippetOptions, required: true }],
       build: (v) => `{import: ${v.shortcut}}`,
     },
     {
-      id: 'var', group: 'Logic', icon: 'variable', title: 'Set variable',
+      id: 'var', group: 'Snippets & logic', icon: 'variable', title: 'Set variable',
       desc: 'Store a value to reuse later', keywords: 'variable assign let',
       fields: [
         { key: 'name', label: 'Variable name', required: true, mono: true, pattern: /^[A-Za-z_]\w*$/, patternMsg: 'Letters, digits and _ only; cannot start with a digit.' },
@@ -832,7 +923,7 @@
       build: (v) => `{${v.name}=${v.value}}`,
     },
     {
-      id: 'expr', group: 'Logic', icon: 'sigma', title: 'Show value',
+      id: 'expr', group: 'Snippets & logic', icon: 'sigma', title: 'Show value',
       desc: 'Insert the result of an expression', keywords: 'calculate math expression formula',
       fields: [{ key: 'expr', label: 'Expression', required: true, mono: true, hint: 'Variables, + - * / %, & joins text, floor() round() …' }],
       build: (v) => `{=${v.expr}}`,
@@ -856,7 +947,7 @@
       else nodes.push(el('div', { className: 'cmd-empty', textContent: 'No matching command.' }));
     } else {
       nodes.push(el('div', { className: 'cmd-group', textContent: 'Frequently used' }), ...COMMANDS.filter((c) => c.frequent).map(item));
-      for (const g of ['Automation', 'Forms', 'Data', 'Logic']) {
+      for (const g of ['Automation', 'Forms', 'Test data', 'Snippets & logic']) {
         nodes.push(el('div', { className: 'cmd-group', textContent: g }), ...COMMANDS.filter((c) => c.group === g).map(item));
       }
     }
@@ -1043,6 +1134,7 @@
         sections.push(toggle);
         if (showAdvanced) for (const f of adv) sections.push(fieldSection([f]));
       }
+      if (!sections.length) sections.push(el('section', { className: 'cfg-section' }, [el('p', { className: 'cfg-desc', textContent: `${c.desc}. Nothing to set up.` })]));
       body.replaceChildren(...sections);
       updateOut();
     }

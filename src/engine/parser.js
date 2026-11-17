@@ -125,7 +125,7 @@
 
   const ACTION_CMDS = new Set(['click', 'select', 'clear', 'wait', 'key']);
   const FORM_CMDS = new Set(['formtext', 'formmenu', 'formparagraph']);
-  const DATA_CMDS = new Set(['thaiid', 'random-number']);
+  const DATA_CMDS = new Set(['thaiid', 'random-number', 'thaiphone', 'thainame', 'email', 'date', 'zipcode', 'bankaccount', 'randomtext']);
 
   /** Highlight category for a parsed block node. */
   function blockKind(node, known) {

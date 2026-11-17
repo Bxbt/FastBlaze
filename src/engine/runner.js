@@ -52,6 +52,18 @@
     thaiid(a) {
       return FB.generateThaiId({ prefix: a.prefix ?? a.first ?? a._[0], format: a.format });
     },
+    // ---- test data (generators.js) ----
+    thaiphone(a) { return FB.gen.phone({ type: a.type, prefix: a.prefix, format: a.format }); },
+    thainame(a) {
+      return FB.gen.name({ part: a.part ?? a._[0], gender: a.gender, lang: a.lang, title: isYes(a.title, false) });
+    },
+    email(a) { return FB.gen.email({ base: a.base, domain: a.domain }); },
+    date(a, ctx) {
+      return FB.gen.date({ format: a.format ?? a._[0], shift: a.shift, age: a.age, now: ctx.now });
+    },
+    zipcode() { return FB.gen.zipcode(); },
+    bankaccount(a) { return FB.gen.bankAccount({ format: a.format }); },
+    randomtext(a) { return FB.gen.randomText({ length: a.length ?? a._[0], type: a.type }); },
     formtext(a, ctx) { return formValue(a, ctx, 'text'); },
     formparagraph(a, ctx) { return formValue(a, ctx, 'paragraph'); },
     formmenu(a, ctx) { return formValue(a, ctx, 'menu'); },
@@ -213,6 +225,7 @@
       fields: opts.collect ? [] : null,
       fieldCounter: 0,
       depth: 0,
+      now: opts.now || null,
     };
   }
 
