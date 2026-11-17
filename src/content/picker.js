@@ -154,6 +154,7 @@
         [LAST_PICK_KEY]: {
           command: commands[0], commands, url: location.href, at: Date.now(),
           candidates: cands.map((c) => ({ selector: c.selector ?? null, text: c.text ?? null, stability: c.stability, kind: c.kind })),
+          list: FB.selector.listSelector(el),
         },
       });
     }

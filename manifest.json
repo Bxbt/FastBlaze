@@ -41,6 +41,7 @@
         "src/engine/expr.js",
         "src/engine/parser.js",
         "src/engine/thaiid.js",
+        "src/engine/thai-zipcodes.js",
         "src/engine/generators.js",
         "src/engine/runner.js",
         "src/shared/defaults.js",

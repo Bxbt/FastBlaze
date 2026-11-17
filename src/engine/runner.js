@@ -57,13 +57,13 @@
       return FB.gen.phone({ type: a.type, prefix: a.prefix, format: a.format, source: a.source, allow: ctx.testData.phones });
     },
     thainame(a) {
-      return FB.gen.name({ part: a.part ?? a._[0], gender: a.gender, lang: a.lang, title: isYes(a.title, false) });
+      return FB.gen.name({ part: a.part ?? a._[0], gender: a.gender, lang: a.lang, title: isYes(a.title, false), style: a.style });
     },
     email(a) { return FB.gen.email({ base: a.base, domain: a.domain }); },
     date(a, ctx) {
       return FB.gen.date({ format: a.format ?? a._[0], shift: a.shift, age: a.age, now: ctx.now });
     },
-    zipcode() { return FB.gen.zipcode(); },
+    zipcode(a) { return FB.gen.zipcode({ province: a.province ?? a._[0], prefix: a.prefix }); },
     bankaccount(a, ctx) { return FB.gen.bankAccount({ format: a.format, source: a.source, allow: ctx.testData.banks }); },
     randomtext(a) { return FB.gen.randomText({ length: a.length ?? a._[0], type: a.type }); },
     formtext(a, ctx) { return formValue(a, ctx, 'text'); },
@@ -91,13 +91,26 @@
     },
     // {click: selector=CSS} or {click: text=Label} (optionally both: text inside selector scope)
     // maxdelay=5s overrides how long to wait for the element (default: Settings).
+    // list=<all options> marks a dropdown option (recorded automatically). Without pick
+    // it only scopes the text search; with pick it is the list to choose from.
     click(a, ctx, emit) {
-      const selector = a.selector ?? a._[0] ?? null;
-      const text = a.text ?? null;
-      if (!selector && !text) throw new Error('click needs selector= or text=');
+      const list = a.list || null;
+      const picking = a.pick != null && a.pick !== '';
+      const selector = (picking && list) ? list : (a.selector ?? a._[0] ?? (a.text != null ? list : null) ?? null);
+      const text = picking ? null : (a.text ?? null);
+      if (!selector && text == null) throw new Error('click needs selector= or text=');
       const action = text != null ? { type: 'click', selector, text } : { type: 'click', selector };
       if (a.maxdelay != null && a.maxdelay !== '') action.timeout = parseDelay(a.maxdelay);
       if (isYes(a.force, false)) action.force = true; // skip the "really clickable" checks
+      // pick= chooses one of ALL matching elements (dropdown options):
+      // random | next (cycles each run) | first | last | N (1-based). exclude=A|B skips by text.
+      if (a.pick != null && a.pick !== '') {
+        const pick = String(a.pick).trim().toLowerCase();
+        if (!/^(random|next|first|last|[1-9]\d*)$/.test(pick)) throw new Error('pick must be random, next, first, last or a number');
+        if (!selector) throw new Error('pick needs selector= or list= (all options of the list)');
+        action.pick = pick;
+      }
+      if (a.exclude) action.exclude = String(a.exclude).split('|').map((x) => x.trim()).filter(Boolean);
       if (emit) ctx.actions.push(action);
       return '';
     },
@@ -157,7 +170,9 @@
   function describeAction(a) {
     switch (a.type) {
       case 'text': return `type "${a.value.length > 40 ? `${a.value.slice(0, 40)}…` : a.value}"`;
-      case 'click': return a.text != null ? `click "${a.text}"${a.selector ? ` in ${a.selector}` : ''}` : `click ${a.selector}`;
+      case 'click':
+        if (a.pick) return `click ${a.pick === 'next' ? 'next' : a.pick === 'random' ? 'a random' : a.pick} option of ${a.selector}`;
+        return a.text != null ? `click "${a.text}"${a.selector ? ` in ${a.selector}` : ''}` : `click ${a.selector}`;
       case 'wait': return `wait ${a.ms} ms`;
       case 'idle': return 'wait until the page is idle';
       case 'waitfor': {

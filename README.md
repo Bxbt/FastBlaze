@@ -23,7 +23,11 @@ After editing code: click ↻ on the extension card, then reload the page.
 - **Record** (popup button, or **Record from website** in the Manage page commands):
   clicks, typing, native dropdown choices and Enter/Escape become steps; recording
   survives page loads. Password values are never stored (a `{formtext}` is used).
-  Pauses longer than 3 s are recorded as `{wait: idle}`.
+  A pause while the page was busy loading is recorded as `{wait: idle}`.
+  Clicks on dropdown options are recognised (amber *option* chips) and keep the whole
+  list: `{click: text=iPhone 15; list=.overflow-auto > div}`. Choose **Dropdowns: Same
+  option / Random / Next each run** in the recording bar, or switch them all later with
+  the **Dropdowns** button in the editor toolbar.
   **Stop & save** turns typed Thai IDs / phones / emails into generators (toggle
   "Test data"). From the popup it creates a snippet in the *Recorded* folder and
   opens it; from the Manage page the steps are inserted at the cursor.
@@ -59,6 +63,12 @@ After editing code: click ↻ on the extension card, then reload the page.
 - Running a flow shows a progress panel (bottom-left). **Esc** or **Stop** cancels.
   Failures name the step (`Step 14/26: click …`) and flash the element red.
 
+## Selector tips
+
+- Dates or other changing text inside a selector break the next day. Match the stable part instead:
+  `button[aria-label^="Today"]` (`^=` starts with, `*=` contains).
+- Prefer `data-testid` / `id` / `name`; avoid `div:nth-of-type(2) > label`-style paths.
+
 ## Template syntax
 
 | Syntax | Meaning |
@@ -66,16 +76,19 @@ After editing code: click ↻ on the extension card, then reload the page.
 | `{thaiid}` / `{thaiid: prefix=8; format=dash}` | Valid Thai ID (test data) |
 | `{random-number: min=0; max=9}` | Random integer (`rounded=no` → decimal) |
 | `{thaiphone}` / `{thaiphone: type=landline; format=dash; prefix=064; source=random}` | From the Settings allow list; random Thai mobile / landline only when the list is empty or `source=random` |
-| `{thainame}` / `{thainame: part=first; gender=male; lang=en; title=yes}` | Thai (or romanized) first / last / full name, optional นาย / นางสาว |
+| `{thainame}` / `{thainame: style=real\|edge; part=first; gender=male; lang=en; title=yes}` | Default `style=test`: names made of test / tech words (นายทดสอบ ระบบงาน) that never belong to a real person (PDPA-safe). `real` = common real names, `edge` = QA cases (long, symbols, stacked vowels, double spaces) |
 | `{email}` / `{email: base=qa; domain=example.com}` | Unique test address (default `example.com`, never delivers) |
 | `{date}` / `{date: age=20-40; format=DDMMBBBB}` / `{date: shift=-3d}` | Today, shifted, or random birthday for an age range. Tokens: `BBBB`/`BB` พ.ศ., `YYYY`/`YY` ค.ศ., `MMMM`/`MMM` Thai month, `MM`, `DD` |
-| `{zipcode}` `{bankaccount: format=dash}` `{randomtext: length=8; type=digits}` | Thai postal code, 10-digit account, random text |
+| `{zipcode}` / `{zipcode: province=ขอนแก่น}` / `{zipcode: prefix=11}` | A **real** Thai postal code (964 codes from [kongvut/thai-province-data](https://github.com/kongvut/thai-province-data), MIT) |
+| `{bankaccount: format=dash}` `{randomtext: length=8; type=digits}` | 10-digit account, random text |
 | `{x=5}` `{y={random-number: min=1; max=9}}` | Variables |
 | `{=x*2 + floor(y/3)}` | Expression (`& ` joins text) |
 | `{formtext: name=a; default=b}` `{formmenu: default=A; B; name=m}` `{formparagraph}` | Ask before insert |
 | `{import: /id}` | Insert another snippet |
 | `{click: selector=CSS}` | Wait ≤5s for visible element, click; following text types into focus |
 | `{click: text=Label}` | Click element whose visible text equals Label (`selector=` narrows the search) |
+| `{click: text=iPhone 15; list=.overflow-auto > div}` | A recorded dropdown option: clicks iPhone 15 inside that list; add `pick=random` / `next` to choose from the list instead |
+| `{click: selector=.overflow-auto > div; pick=random}` | Click one of **all** matching options: `pick=random`, `next` (a different option each run, cycling), `first`, `last`, or a number. `exclude=— เลือก —\|ไม่ระบุ` skips options; disabled ones are skipped. Pick finds the list selector when you select one option |
 | `{click: …; maxdelay=3s}` | Wait up to this long for the element (default: Settings) |
 | (all clicks) | Wait until the element is **really clickable**: visible, enabled, not covered, not moving; re-found if the page re-renders it. `force=yes` skips the checks |
 | `{waitfor: selector=.result}` / `{waitfor: selector=.spinner; state=gone}` / `{waitfor: text=บันทึกสำเร็จ}` | Wait until something appears / disappears (no click) |

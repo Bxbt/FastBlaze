@@ -463,3 +463,6 @@ dialog#settings { width: min(560px, calc(100vw - 32px)); max-height: calc(100vh 
 
 .rec-wait { margin-top: 12px; }
 .cmd-item .cmd-icon svg circle[fill] { color: #ef4444; }
+
+.blk-cmd.blk-option { border-color: #f59e0b; border-style: dashed; }
+.blk-cmd.blk-option .icon-wrap { color: #d97706; }

@@ -1,7 +1,7 @@
 // Turns recorded steps into a snippet template (pure; used by the background and tests).
 //
 // Step shapes (produced by src/content/recorder.js):
-//   { type: 'click', selector?, text? }          text = visible-text match when no good selector
+//   { type: 'click', selector?, text?, list? }   list = selector of all options (dropdown option)
 //   { type: 'type', value, clear?, secret?, field? }  value typed into the focused field
 //   { type: 'select', selector, text }            native <select>
 //   { type: 'key', key }                          enter | escape
@@ -26,9 +26,17 @@
 
   function stepTemplate(step, opts) {
     switch (step.type) {
-      case 'click':
+      case 'click': {
+        // Dropdown option: keep what was clicked + the whole list, so it can be
+        // switched to pick=random / next later (or right away via opts.dropdowns).
+        if (step.list) {
+          const what = step.text != null ? `text=${tplArg(step.text)}` : `selector=${tplArg(step.selector)}`;
+          const pick = opts.dropdowns === 'random' || opts.dropdowns === 'next' ? `; pick=${opts.dropdowns}` : '';
+          return `{click: ${what}; list=${tplArg(step.list)}${pick}}`;
+        }
         if (step.text != null && !step.selector) return `{click: text=${tplArg(step.text)}}`;
         return `{click: selector=${tplArg(step.selector)}}`;
+      }
       case 'select':
         return `{select: selector=${tplArg(step.selector)}; text=${tplArg(step.text)}}`;
       case 'key':
@@ -48,6 +56,7 @@
 
   /**
    * steps -> template. opts.convert: typed IDs / phones / emails become generators.
+   * opts.dropdowns: 'fixed' (default) | 'random' | 'next' for recorded dropdown options.
    * Consecutive duplicate clicks collapse into one.
    */
   function buildRecordedTemplate(steps, opts) {

@@ -132,6 +132,50 @@
     return out.sort((a, b) => rank[a.stability] - rank[b.stability]);
   }
 
+  /**
+   * Selector for ALL options of the list this element belongs to (for pick=random/next):
+   * walks up a few levels to find an item whose parent holds 2+ siblings of the same tag.
+   * Returns { selector, count } or null.
+   */
+  // An open dropdown is usually the only visible element with its role / class, even when
+  // that class is a utility class (e.g. ".overflow-auto"), so short selectors work here.
+  function listContainerSelector(parent) {
+    const visibleMatches = (sel) => {
+      try { return FB.dom.queryAllDeep(sel).filter((x) => FB.dom.isVisible(x)); } catch { return []; }
+    };
+    const t = testAttr(parent) || stableId(parent);
+    if (t) return t;
+    const role = parent.getAttribute('role');
+    if (role) {
+      const sel = `[role=${cssString(role)}]`;
+      const m = visibleMatches(sel);
+      if (m.length === 1 && m[0] === parent) return sel;
+    }
+    for (const c of parent.classList) {
+      if (/[:[\]/]/.test(c)) continue;
+      const sel = `.${CSS.escape(c)}`;
+      const m = visibleMatches(sel);
+      if (m.length === 1 && m[0] === parent) return sel;
+    }
+    return null;
+  }
+
+  function listSelector(el) {
+    for (let item = el, depth = 0; item && depth < 4; item = item.parentElement, depth++) {
+      const parent = item.parentElement;
+      if (!parent || parent === document.body) break;
+      const same = [...parent.children].filter((c) => c.tagName === item.tagName);
+      if (same.length < 2) continue;
+      const parentSel = listContainerSelector(parent) || (candidates(parent).find((c) => c.selector) || {}).selector;
+      if (!parentSel) continue;
+      const sel = `${parentSel} > ${item.tagName.toLowerCase()}`;
+      let all = [];
+      try { all = FB.dom.queryAllDeep(sel).filter((x) => FB.dom.isVisible(x)); } catch { continue; }
+      if (all.length >= 2 && all.includes(item)) return { selector: sel, count: all.length };
+    }
+    return null;
+  }
+
   // Escape for use inside a FastBlaze template argument.
   const tplArg = (s) => String(s).replace(/[\\{};]/g, '\\$&');
 
@@ -145,5 +189,5 @@
     return `{click: selector=${tplArg(c.selector)}}`;
   }
 
-  FB.selector = { candidates, toCommand, pathSelector, tplArg };
+  FB.selector = { candidates, toCommand, pathSelector, tplArg, listSelector };
 })();

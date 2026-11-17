@@ -228,15 +228,20 @@
    * Wait until the element exists AND can be clicked: visible, enabled, not covered,
    * and not moving (same position on two checks in a row, so animations finish).
    */
-  async function waitForClickable(selector, timeout, run, text) {
-    const until = Date.now() + timeout;
+  function waitForClickable(selector, timeout, run, text) {
     const label = text != null ? `text "${text}"${selector ? ` in ${selector}` : ''}` : selector;
+    const find = () => (text != null ? findByText(text, selector) : findElement(selector));
+    return waitClickableBy(find, label, timeout, run);
+  }
+
+  async function waitClickableBy(find, label, timeout, run) {
+    const until = Date.now() + timeout;
     let lastRect = null;
     let scrolled = null;
     let reason = 'not found';
     for (;;) {
       if (run && run.cancelled) throw new Cancelled();
-      const el = text != null ? findByText(text, selector) : findElement(selector);
+      const el = find();
       if (el) {
         if (scrolled !== el) { el.scrollIntoView({ block: 'center', inline: 'nearest' }); scrolled = el; lastRect = null; }
         const r = el.getBoundingClientRect();
@@ -251,8 +256,56 @@
           ? `Element not found after ${timeout / 1000}s: ${label}`
           : `Element found but not clickable after ${timeout / 1000}s (${reason}): ${label}`);
       }
-      await sleep(text != null ? 100 : 50);
+      await sleep(50);
     }
+  }
+
+  // ---- pick= : choose one of all matching options ---------------------------------
+  const CYCLE_PREFIX = 'fastblaze.cycle:';
+
+  /** Round-robin index per selector, remembered across runs (pick=next). */
+  async function nextIndex(key, n) {
+    try {
+      const k = CYCLE_PREFIX + key;
+      const got = await chrome.storage.local.get(k);
+      const i = (Number(got[k]) || 0) % n;
+      await chrome.storage.local.set({ [k]: i + 1 });
+      return i;
+    } catch {
+      return 0;
+    }
+  }
+
+  function optionList(a) {
+    const skip = new Set((a.exclude || []).map(normText));
+    return queryAllDeep(a.selector).filter((el) => isVisible(el) && !el.disabled
+      && el.getAttribute('aria-disabled') !== 'true' && !skip.has(normText(el.textContent)));
+  }
+
+  /** Wait until the option list is rendered (same count on two checks), then choose one. */
+  async function chooseOption(a, timeout, run) {
+    const until = Date.now() + timeout;
+    let last = -1;
+    let list = [];
+    for (;;) {
+      if (run && run.cancelled) throw new Cancelled();
+      list = optionList(a);
+      if (list.length && list.length === last) break;
+      last = list.length;
+      if (Date.now() > until) {
+        if (list.length) break;
+        throw new Error(`No options found after ${timeout / 1000}s: ${a.selector}`);
+      }
+      await sleep(80);
+    }
+    const n = list.length;
+    let i;
+    if (a.pick === 'random') i = Math.floor(Math.random() * n);
+    else if (a.pick === 'first') i = 0;
+    else if (a.pick === 'last') i = n - 1;
+    else if (a.pick === 'next') i = await nextIndex(a.selector, n);
+    else i = Math.min(Number(a.pick), n) - 1;
+    return i;
   }
 
   /** {waitfor}: until something is visible (state=visible) or no longer visible (state=gone). */
@@ -427,11 +480,24 @@
           case 'click': {
             // Wait until really clickable; if the page re-renders the element right
             // before the click, find it again (up to 3 tries).
-            const wait = a.force ? waitForElement : waitForClickable;
-            for (let attempt = 1; ; attempt++) {
-              el = await wait(a.selector, a.timeout ?? timeout, run, a.text);
-              mark(el);
-              if (el.isConnected || attempt >= 3) break;
+            const limit = a.timeout ?? timeout;
+            if (a.pick) {
+              // Choose once; if the list re-renders, click the same position again.
+              const index = await chooseOption(a, limit, run);
+              const find = () => optionList(a)[index] || null;
+              for (let attempt = 1; ; attempt++) {
+                el = a.force ? find() : await waitClickableBy(find, `option ${index + 1} of ${a.selector}`, limit, run);
+                if (!el) throw new Error(`Option ${index + 1} of ${a.selector} disappeared`);
+                mark(el);
+                if (el.isConnected || attempt >= 3) break;
+              }
+            } else {
+              const wait = a.force ? waitForElement : waitForClickable;
+              for (let attempt = 1; ; attempt++) {
+                el = await wait(a.selector, limit, run, a.text);
+                mark(el);
+                if (el.isConnected || attempt >= 3) break;
+              }
             }
             simulateClick(el);
             await pause(stepDelay, run);

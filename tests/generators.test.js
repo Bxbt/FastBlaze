@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 require('../src/engine/expr.js');
 require('../src/engine/parser.js');
 require('../src/engine/thaiid.js');
+require('../src/engine/thai-zipcodes.js');
 require('../src/engine/generators.js');
 require('../src/engine/runner.js');
 const FB = globalThis.FastBlaze;
@@ -74,7 +75,6 @@ test('date: random birthday within an age range', () => {
 });
 
 test('zipcode, bank account, random text', () => {
-  for (const z of many(() => run('{zipcode}'))) assert.match(z, /^(1\d|2[0-7]|3\d|4\d|5[0-8]|6[0-7]|7[0-7]|8[0-6]|9[0-6])\d{3}$/);
   assert.match(run('{bankaccount}'), /^[1-9]\d{9}$/);
   assert.match(run('{bankaccount: format=dash}'), /^\d{3}-\d-\d{5}-\d$/);
   assert.match(run('{randomtext}'), /^[a-zA-Z0-9]{8}$/);
@@ -103,4 +103,35 @@ test('allow lists: phone and bank only use team-owned values', () => {
   assert.equal(run('{bankaccount: format=dash}', { testData }), '111-2-22333-4');
   // explicit opt-out
   assert.match(run('{thaiphone: source=random}', { testData }), /^0[689]\d{8}$/);
+});
+
+test('zipcode: only real Thai postal codes; province / prefix filters', () => {
+  const real = new Set(FB.THAI_ZIPCODES.flatMap((r) => r[2].split(' ')));
+  assert.ok(real.size > 900, `expected the full list, got ${real.size}`);
+  assert.ok(!real.has('11170') && !real.has('10000'), 'codes that do not exist must not be in the list');
+  for (const z of ['10200', '10110', '11000', '20000', '40000', '50000', '90110']) assert.ok(real.has(z), z);
+  for (const z of many(() => run('{zipcode}'), 2000)) assert.ok(real.has(z), z);
+  const kk = new Set(FB.THAI_ZIPCODES.find((r) => r[0] === 'ขอนแก่น')[2].split(' '));
+  for (const z of many(() => run('{zipcode: province=ขอนแก่น}'), 200)) assert.ok(kk.has(z), z);
+  for (const z of many(() => run('{zipcode: province=Khon Kaen}'), 50)) assert.ok(kk.has(z), z);
+  for (const z of many(() => run('{zipcode: prefix=11}'), 100)) assert.match(z, /^11(000|110|120|130|140|150)$/);
+  assert.match(FB.compile('{zipcode: province=Atlantis}').errors[0], /Unknown province/);
+  assert.match(FB.compile('{zipcode: prefix=99}').errors[0], /No real postal code/);
+});
+
+test('thainame: default style is test-safe, real and edge are opt-in', () => {
+  const realFirst = ['สมชาย', 'สมศักดิ์', 'ประเสริฐ', 'วิชัย', 'สุรชัย', 'สมหญิง', 'สุภาพร', 'ศิริพร'];
+  for (const n of many(() => run('{thainame}'), 300)) {
+    const [first] = n.split(' ');
+    assert.ok(!realFirst.includes(first), `default produced a real name: ${n}`);
+    assert.match(n, /^[฀-๿]+ [฀-๿]+$/, `only Thai letters expected: ${n}`);
+  }
+  assert.match(run('{thainame: lang=en}'), /^[A-Z][a-z]+ [A-Z][a-z]+$/);
+  const real = many(() => run('{thainame: style=real; part=first}'), 200);
+  assert.ok(real.some((n) => realFirst.includes(n)), 'style=real should use common real names');
+  const edge = many(() => run('{thainame: style=edge}'), 300);
+  assert.ok(edge.some((n) => n.length > 40), 'edge set includes very long names');
+  assert.ok(edge.some((n) => n.includes('  ')), 'edge set includes double spaces');
+  assert.ok(edge.some((n) => /['\-_.()]/.test(n)), 'edge set includes symbols');
+  assert.ok(edge.every((n) => !/OR\s*'1'\s*=\s*'1|<script/i.test(n)), 'no injection payloads');
 });
