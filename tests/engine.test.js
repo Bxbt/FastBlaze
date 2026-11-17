@@ -58,10 +58,10 @@ test('template: random-number is integer in range', () => {
   }
 });
 
-// The exact /id snippet from the Text Blaze export must keep working unchanged.
+// The exact /id snippet from the original export must keep working unchanged.
 const TB_ID_SNIPPET = '{d1=8}{d2={random-number: min=0; max=9; rounded=yes}}{d3={random-number: min=0; max=9; rounded=yes}}{d4={random-number: min=0; max=9; rounded=yes}}{d5={random-number: min=0; max=9; rounded=yes}}{d6={random-number: min=0; max=9; rounded=yes}}{d7={random-number: min=0; max=9; rounded=yes}}{d8={random-number: min=0; max=9; rounded=yes}}{d9={random-number: min=0; max=9; rounded=yes}}{d10={random-number: min=0; max=9; rounded=yes}}{d11={random-number: min=0; max=9; rounded=yes}}{d12={random-number: min=0; max=9; rounded=yes}}{sum13=13*d1 + 12*d2 + 11*d3 + 10*d4 + 9*d5 + 8*d6 + 7*d7 + 6*d8 + 5*d9 + 4*d10 + 3*d11 + 2*d12}{mod11={=sum13-11*floor(sum13/11)}}{chk={=11 - mod11}}{chk={=chk-10*floor(chk/10)}}{=d1}{=d2}{=d3}{=d4}{=d5}{=d6}{=d7}{=d8}{=d9}{=d10}{=d11}{=d12}{=chk}';
 
-test('compat: Text Blaze /id snippet yields valid Thai IDs', () => {
+test('compat: imported /id snippet yields valid Thai IDs', () => {
   for (let i = 0; i < 300; i++) {
     const r = FB.compile(TB_ID_SNIPPET);
     assert.deepEqual(r.errors, []);
@@ -120,6 +120,26 @@ test('clear and select commands compile to actions', () => {
   ]);
   assert.match(FB.compile('{select: selector=#p}').errors[0], /value=, text= or index=/);
   assert.match(FB.compile('{select: value=1}').errors[0], /selector=/);
+});
+
+test('click by visible text', () => {
+  const r = FB.compile('{click: text=บางรัก}{click: selector=.menu; text=สีลม}');
+  assert.deepEqual(r.errors, []);
+  assert.deepEqual(r.actions, [
+    { type: 'click', selector: null, text: 'บางรัก' },
+    { type: 'click', selector: '.menu', text: 'สีลม' },
+  ]);
+  assert.equal(FB.describeAction(r.actions[1]), 'click "สีลม" in .menu');
+  assert.match(FB.compile('{click}').errors[0], /selector= or text=/);
+});
+
+test('picker output round-trips through the template parser', () => {
+  // selector.js tplArg escaping: \ { } ; must survive parseArgs/unescape.
+  const tplArg = (s) => String(s).replace(/[\\{};]/g, '\\$&');
+  const sel = '.focus\\:outline-none [data-x="a;b{c}"]';
+  const r = FB.compile(`{click: selector=${tplArg(sel)}}`);
+  assert.deepEqual(r.errors, []);
+  assert.equal(r.actions[0].selector, sel);
 });
 
 test('describeAction labels every action type', () => {

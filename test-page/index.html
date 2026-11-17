@@ -90,7 +90,8 @@
     if (location.search.includes('harness')) {
       const files = ['chrome-mock.js', '../src/engine/expr.js', '../src/engine/parser.js', '../src/engine/thaiid.js',
         '../src/engine/runner.js', '../src/shared/defaults.js', '../src/shared/storage.js',
-        '../src/content/dom.js', '../src/content/ui.js', '../src/content/content.js'];
+        '../src/content/dom.js', '../src/content/ui.js', '../src/content/selector.js', '../src/content/picker.js',
+        '../src/content/content.js'];
       (function next(i) {
         if (i >= files.length) return;
         const s = document.createElement('script');

@@ -1,14 +1,14 @@
 # FastBlaze
 
-Personal Chrome extension (MV3) replacing Text Blaze for test-form work:
+Personal Chrome extension (MV3) for test-form work:
 snippets, Thai test ID generator, and click automation. Reads/writes the
-Text Blaze export format, so existing snippets import unchanged.
+common snippet export format (v7 JSON: folders → snippets), so existing snippets import unchanged.
 
 ## Install (unpacked)
 
 1. `chrome://extensions` → enable **Developer mode**
 2. **Load unpacked** → pick this folder
-3. Options page opens → **Import JSON** → choose your Text Blaze export
+3. Options page opens → **Import JSON** → choose your snippet export (.json)
 4. Reload open tabs (or run a snippet from the popup; it injects itself)
 
 After editing code: click ↻ on the extension card, then reload the page.
@@ -20,8 +20,12 @@ After editing code: click ↻ on the extension card, then reload the page.
   and the field is restored to its value before the shortcut.
 - Popup (`Alt+Shift+F`): search + run a snippet on the current page,
   generate/copy a Thai test ID.
+- **🎯 Pick** (popup button or `Alt+Shift+P`): hover an element (yellow box), click it
+  to get ranked selectors (stable / ok / fragile). The best command is copied and
+  available as **🎯 Insert picked** in the editor. `↑`/`↓` = parent/child, `Esc` = cancel.
 - Options page: edit snippets, live preview of the action list, import/export,
-  ⚙ Settings (highlight on/off, pause per step, element timeout).
+  ⚙ Settings (highlight on/off, pause per step, element timeout),
+  Appearance switch (System / Light / Dark).
 - Running a flow shows a progress panel (bottom-left). **Esc** or **Stop** cancels.
   Failures name the step (`Step 14/26: click …`) and flash the element red.
 
@@ -36,6 +40,7 @@ After editing code: click ↻ on the extension card, then reload the page.
 | `{formtext: name=a; default=b}` `{formmenu: default=A; B; name=m}` `{formparagraph}` | Ask before insert |
 | `{import: /id}` | Insert another snippet |
 | `{click: selector=CSS}` | Wait ≤5s for visible element, click; following text types into focus |
+| `{click: text=Label}` | Click element whose visible text equals Label (`selector=` narrows the search) |
 | `{clear}` / `{clear: selector=CSS}` | Empty focused (or matched) field before typing |
 | `{select: selector=CSS; value=10}` | Native `<select>` by `value=`, `text=` or `index=` |
 | `{wait: 500ms}` `{key: enter\|tab\|escape\|up\|down}` | Pause / key press |
@@ -49,14 +54,15 @@ python3 -m http.server 8765  # then open /test-page/?harness
 ```
 
 `test-page/?harness` loads the content scripts with a `chrome.*` mock, so the
-expansion and automation can be tried without installing the extension.
+expansion, automation and picker can be tried without installing the extension.
+`test-page/options-harness.html` opens the real Options page with the same mock.
 
 ## Layout
 
 ```
 src/engine/   expr (safe evaluator), parser, thaiid, runner (template → actions)
-src/content/  dom (insert/click/wait), ui (form dialog, toast), content (triggers)
-src/shared/   storage (chrome.storage + Text Blaze import/export), defaults
+src/content/  dom (insert/click/wait), ui (form dialog, toast), selector + picker, content (triggers)
+src/shared/   storage (chrome.storage + JSON import/export), defaults, tabs, theme, base.css (brand tokens)
 src/popup/    toolbar popup
 src/options/  snippet manager
 ```

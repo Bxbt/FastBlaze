@@ -156,7 +156,13 @@
   }
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-    if (!msg || msg.type !== 'fastblaze:run' || window !== window.top) return;
+    if (!msg || window !== window.top) return;
+    if (msg.type === 'fastblaze:pick') {
+      FB.picker.start();
+      sendResponse({ ok: true });
+      return;
+    }
+    if (msg.type !== 'fastblaze:run') return;
     const run = (list) => {
       const snip = list.find((s) => s.id === msg.id);
       if (!snip) return sendResponse({ ok: false, error: 'Snippet not found' });

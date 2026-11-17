@@ -187,7 +187,7 @@
   }
 
   function exportFile() {
-    const blob = new Blob([JSON.stringify(FB.storage.toTextBlaze(data), null, 1)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify(FB.storage.toExportJson(data), null, 1)], { type: 'application/json' });
     const a = el('a', { href: URL.createObjectURL(blob), download: `fastblaze-export-${new Date().toISOString().slice(0, 10)}.json` });
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
@@ -219,6 +219,28 @@
       clearTimeout(saveTimer);
       persist();
     }
+  });
+
+  // ---------- picked element (from the page picker) ----------
+  const LAST_PICK_KEY = 'fastblaze.lastPick';
+  let lastPick = null;
+
+  function showPick(p) {
+    lastPick = p || null;
+    $('insert-pick').disabled = !lastPick;
+    $('insert-pick').title = lastPick ? lastPick.command : 'Use 🎯 Pick in the popup (Alt+Shift+P) on a page first';
+  }
+  chrome.storage.local.get(LAST_PICK_KEY).then((got) => showPick(got[LAST_PICK_KEY]));
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes[LAST_PICK_KEY]) showPick(changes[LAST_PICK_KEY].newValue);
+  });
+  $('insert-pick').addEventListener('click', () => {
+    if (!lastPick) return;
+    const ta = $('f-text');
+    ta.focus();
+    ta.setRangeText(lastPick.command, ta.selectionStart, ta.selectionEnd, 'end');
+    onEdit();
+    renderPreview();
   });
 
   // ---------- settings ----------

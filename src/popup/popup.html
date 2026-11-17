@@ -5,11 +5,15 @@
   <title>FastBlaze</title>
   <link rel="stylesheet" href="../shared/base.css">
   <link rel="stylesheet" href="popup.css">
+  <script src="../shared/theme.js"></script>
 </head>
 <body>
   <header>
-    <strong><img src="../../icons/icon-32.png" alt="" width="20" height="20"> FastBlaze</strong>
-    <button id="open-options" title="Manage snippets">Manage</button>
+    <strong><img src="../../icons/icon-32.png" alt="" width="22" height="22"> <span class="brand-text">FastBlaze</span></strong>
+    <span class="head-actions">
+      <button id="pick" title="Pick an element on the page (Alt+Shift+P)">🎯 Pick</button>
+      <button id="open-options" title="Manage snippets">Manage</button>
+    </span>
   </header>
 
   <section class="thaiid">
@@ -26,6 +30,7 @@
   <script src="../engine/thaiid.js"></script>
   <script src="../shared/defaults.js"></script>
   <script src="../shared/storage.js"></script>
+  <script src="../shared/tabs.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

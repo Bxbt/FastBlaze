@@ -48,29 +48,18 @@
     else setStatus('');
   }
 
-  async function send(tabId, id) {
-    return chrome.tabs.sendMessage(tabId, { type: 'fastblaze:run', id }, { frameId: 0 });
-  }
-
-  async function run(snippet) {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab) return;
+  async function sendAndClose(msg) {
     try {
-      let res;
-      try {
-        res = await send(tab.id, snippet.id);
-      } catch {
-        // Tab was open before the extension loaded: inject the content scripts now.
-        const files = chrome.runtime.getManifest().content_scripts[0].js;
-        await chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, files });
-        res = await send(tab.id, snippet.id);
-      }
+      const res = await FB.tabs.sendToActiveTab(msg);
       if (res && res.ok === false) throw new Error(res.error);
       window.close();
     } catch (err) {
       setStatus(`Cannot run here: ${err.message}`, true);
     }
   }
+
+  const run = (snippet) => sendAndClose({ type: 'fastblaze:run', id: snippet.id });
+  $('pick').addEventListener('click', () => sendAndClose({ type: 'fastblaze:pick' }));
 
   $('q').addEventListener('input', render);
   $('q').addEventListener('keydown', (e) => {

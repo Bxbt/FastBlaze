@@ -6,17 +6,19 @@
   <title>FastBlaze Snippets</title>
   <link rel="stylesheet" href="../shared/base.css">
   <link rel="stylesheet" href="options.css">
+  <script src="../shared/theme.js"></script>
 </head>
 <body>
   <header class="top">
-    <img src="../../icons/icon-48.png" alt="" width="28" height="28">
-    <strong class="brand">FastBlaze</strong>
+    <img src="../../icons/icon-48.png" alt="" width="32" height="32">
+    <strong class="brand brand-text">FastBlaze</strong>
     <div class="spacer"></div>
-    <button id="new-folder">+ Folder</button>
+    <button id="new-folder" class="ghost">+ Folder</button>
     <button id="new-snippet" class="primary">+ Snippet</button>
-    <button id="import">Import JSON</button>
-    <button id="export">Export JSON</button>
-    <button id="open-settings" title="Settings">⚙ Settings</button>
+    <button id="import" class="ghost">Import JSON</button>
+    <button id="export" class="ghost">Export JSON</button>
+    <button id="open-settings" class="ghost" title="Settings">⚙ Settings</button>
+    <div class="appearance"></div>
     <input id="import-file" type="file" accept=".json,application/json" hidden>
   </header>
 
@@ -53,6 +55,7 @@
         <div class="row actions">
           <span id="saved" class="muted"></span>
           <div class="spacer"></div>
+          <button type="button" id="insert-pick" disabled title="Use 🎯 Pick in the popup (Alt+Shift+P) on a page first">🎯 Insert picked</button>
           <button type="button" id="duplicate">Duplicate</button>
           <button type="button" id="delete" class="danger">Delete</button>
         </div>
@@ -79,6 +82,7 @@
           <tr><td><code>{formtext: name=first; default=ทดสอบ}</code></td><td>Ask before inserting. Also <code>{formmenu: default=A; B; C; name=x}</code>, <code>{formparagraph}</code></td></tr>
           <tr><td><code>{import: /id}</code></td><td>Insert another snippet</td></tr>
           <tr><td><code>{click: selector=[data-testid="x"]}</code></td><td>Wait (up to 5s) for a visible element, click it; text after it types into the focused field</td></tr>
+          <tr><td><code>{click: text=บางรัก}</code></td><td>Click the element whose visible text is exactly this (add <code>selector=</code> to search inside it). Good for dropdown options</td></tr>
           <tr><td><code>{clear}</code> <code>{clear: selector=…}</code></td><td>Empty the focused field (or the matched field) before typing</td></tr>
           <tr><td><code>{select: selector=…; value=10}</code></td><td>Pick an option in a native &lt;select&gt; by <code>value=</code>, <code>text=</code> or <code>index=</code></td></tr>
           <tr><td><code>{wait: 500ms}</code> <code>{key: enter}</code></td><td>Pause; press enter / tab / escape / up / down / space / backspace</td></tr>

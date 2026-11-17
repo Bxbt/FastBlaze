@@ -1,4 +1,4 @@
-// Parses Text Blaze style templates into nodes:
+// Parses snippet templates into nodes:
 //   plain text           -> { type: 'text', value }
 //   {=expr}              -> { type: 'expr', expr }
 //   {name=expr|{cmd}}    -> { type: 'assign', name, value: node }

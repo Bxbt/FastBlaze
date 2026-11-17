@@ -123,6 +123,20 @@
     return null;
   }
 
+  const normText = (s) => (s || '').replace(/\s+/g, ' ').trim();
+
+  /** First visible element whose whole text equals `text` (deepest match wins). */
+  function findByText(text, scope) {
+    const want = normText(text);
+    let best = null;
+    for (const el of document.querySelectorAll(scope ? `${scope}, ${scope} *` : 'body *')) {
+      if (el.tagName === 'SCRIPT' || el.tagName === 'STYLE') continue;
+      if (best && !best.contains(el)) continue; // keep the first match; only go deeper
+      if (normText(el.textContent) === want && isVisible(el)) best = el;
+    }
+    return best;
+  }
+
   class Cancelled extends Error {
     constructor() {
       super('Stopped');
@@ -141,14 +155,15 @@
     }
   }
 
-  async function waitForElement(selector, timeout, run) {
+  async function waitForElement(selector, timeout, run, text) {
     const until = Date.now() + timeout;
+    const label = text != null ? `text "${text}"${selector ? ` in ${selector}` : ''}` : selector;
     for (;;) {
       if (run && run.cancelled) throw new Cancelled();
-      const el = findElement(selector);
+      const el = text != null ? findByText(text, selector) : findElement(selector);
       if (el) return el;
-      if (Date.now() > until) throw new Error(`Element not found after ${timeout / 1000}s: ${selector}`);
-      await sleep(50);
+      if (Date.now() > until) throw new Error(`Element not found after ${timeout / 1000}s: ${label}`);
+      await sleep(text != null ? 100 : 50);
     }
   }
 
@@ -289,7 +304,7 @@
             typeText(a.value, automation);
             break;
           case 'click':
-            el = await waitForElement(a.selector, timeout, run);
+            el = await waitForElement(a.selector, timeout, run, a.text);
             mark(el);
             simulateClick(el);
             await pause(stepDelay, run);
@@ -331,7 +346,7 @@
 
   FB.dom = {
     isEditable, deepActiveElement, textBeforeCaret, deleteBeforeCaret, snapshot, restoreValue,
-    insertText, typeText, findElement, waitForElement, simulateClick, pressKey,
+    insertText, typeText, findElement, findByText, isVisible, waitForElement, simulateClick, pressKey,
     clearField, selectOption, saveSelection, restoreSelection, execute, sleep, Cancelled,
   };
 })();

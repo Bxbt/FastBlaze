@@ -1,6 +1,6 @@
 {
   "name": "fastblaze",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Chrome extension: snippets, Thai test ID generator, click automation",
   "scripts": {

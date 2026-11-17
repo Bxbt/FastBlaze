@@ -1,6 +1,6 @@
 # FastBlaze Roadmap
 
-สถานะ: v0.2 — Phase 1 เสร็จ (flow เสถียร, settings, logo)
+สถานะ: v0.3 — Phase 1 + Phase 3 เสร็จ (flow เสถียร, settings, logo, element picker, theme)
 ลำดับด้านล่างเรียงตาม "คุ้มค่า / แรงที่ใช้" — ทำทีละ phase, แต่ละ phase ใช้งานได้จริงเมื่อจบ
 
 ---
@@ -11,7 +11,7 @@
 
 - [x] **บอกว่าพังที่ขั้นไหน** — toast แสดง `Step 14/26: click .overflow-auto > :nth-child(1)` + สาเหตุ
 - [x] **ปุ่มหยุด / กด Esc ยกเลิก flow** ระหว่างรัน + แถบ progress มุมซ้ายล่าง
-- [x] **`{clear}`** — ล้างค่าในช่องก่อนพิมพ์ (ตอนนี้ต่อท้ายค่าเดิม เหมือน Text Blaze)
+- [x] **`{clear}`** — ล้างค่าในช่องก่อนพิมพ์ (เดิมต่อท้ายค่าเดิม)
 - [x] **`{select: selector=...; value=...}`** — รองรับ `<select>` ธรรมดา (value / text / index)
 - [x] **Settings**: เปิด/ปิด highlight, ความเร็วต่อ step, timeout รอ element
 - [x] Highlight สีแดงที่ element ที่พังเมื่อ flow ล้ม
@@ -28,11 +28,13 @@
 
 ## Phase 3 — Element picker (~1 วัน) ⭐ คุ้มที่สุดสำหรับ automation
 
-- [ ] ปุ่ม "Pick element" ใน popup → hover บนเว็บ = กรอบเหลือง, คลิก = ได้ selector
-- [ ] ลำดับการสร้าง selector (เลือกตัวที่ unique และเสถียรที่สุด):
-      `data-testid` → `id` → `name` / `aria-label` / `placeholder` → ข้อความใน option → class path สั้นสุด
-- [ ] เตือนเมื่อ selector อิง class Tailwind (เปราะ)
-- [ ] ส่ง `{click: selector=...}` กลับไปแทรกใน editor / copy ไว้
+- [x] ปุ่ม "🎯 Pick" ใน popup / `Alt+Shift+P` → hover บนเว็บ = กรอบเหลือง, คลิก = ได้ selector (↑/↓ เลือก parent/child, Esc ยกเลิก)
+- [x] ลำดับการสร้าง selector (ตรวจทุกตัวว่าชี้ element เดียวกันจริง):
+      `data-testid` → `id` → `name` / `aria-label` / `placeholder` → ข้อความ (`{click: text=...}`) → anchored → class / path
+- [x] ป้าย stable / ok / fragile + เตือนเมื่อมีแต่ selector เปราะ
+- [x] Copy อัตโนมัติ + ปุ่ม "🎯 Insert picked" ใน editor
+- [x] `{click: text=...}` คลิกตามข้อความที่เห็น (เหมาะกับตัวเลือกใน dropdown)
+- [x] สีหน้า Manage/popup ตาม CI ของ logo + สลับ Appearance (System / Light / Dark)
 
 ## Phase 4 — Record mode (~2–3 วัน)
 
@@ -45,13 +47,13 @@
 
 - [ ] `{thaiphone}` เบอร์มือถือ 06/08/09, `{thainame}` ชื่อ-นามสกุลไทยสุ่ม, `{email}`
 - [ ] `{date: format=DDMMYYYY; era=be; shift=-25y}` รองรับปี พ.ศ. (ใช้กับ date-of-birth)
-- [ ] `{clipboard}`, `{cursor}` แบบ Text Blaze
+- [ ] `{clipboard}`, `{cursor}`
 
 ## Phase 6 — Data & การแชร์ (~0.5–1 วัน)
 
 - [ ] Backup อัตโนมัติ / `chrome.storage.sync` (ข้ามเครื่อง, จำกัด ~100KB)
 - [ ] Export รายโฟลเดอร์ เพื่อแชร์ให้ทีม QA
-- [ ] Import โฟลเดอร์ที่เหลือจาก Text Blaze (Spec Product - Ufriend, Incident Tracker)
+- [ ] Import โฟลเดอร์ที่เหลือจาก tool เดิม (Spec Product - Ufriend, Incident Tracker)
 
 ## Phase 7 — Packaging
 
@@ -62,7 +64,7 @@
 
 ## Backlog / ไอเดีย
 
-- Chip editor แบบ Text Blaze เต็มรูป (แรงเยอะ — ทำหลัง Phase 2 ถ้ายังไม่พอ)
+- Chip editor แบบเต็มรูป (แสดงคำสั่งเป็น chip) (แรงเยอะ — ทำหลัง Phase 2 ถ้ายังไม่พอ)
 - `{if}` / `{repeat}` เงื่อนไขและวนซ้ำ
 - รัน flow ข้าม iframe
 - Assert step (`{expect: selector=...; text=...}`) — ใช้เป็น smoke test เบา ๆ

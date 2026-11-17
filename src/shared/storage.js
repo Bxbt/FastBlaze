@@ -1,4 +1,4 @@
-// Snippet storage in chrome.storage.local + Text Blaze JSON import/export.
+// Snippet storage in chrome.storage.local + JSON import/export (v7 folders/snippets format).
 (function () {
   'use strict';
   const FB = (globalThis.FastBlaze = globalThis.FastBlaze || {});
@@ -36,7 +36,7 @@
     return normalize(data).folders.flatMap((f) => f.snippets.map((s) => ({ ...s, folderId: f.id, folder: f.name })));
   }
 
-  /** Merge an imported file (Text Blaze export or FastBlaze export). Same folder name + same shortcut = replace. */
+  /** Merge an imported file (v7 JSON export). Same folder name + same shortcut = replace. */
   function mergeImport(current, imported) {
     const data = normalize(current);
     const incoming = normalize(imported);
@@ -60,8 +60,8 @@
 
   const escapeHtml = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-  /** Export in Text Blaze v7 shape so the file still imports into Text Blaze. */
-  function toTextBlaze(data) {
+  /** Export as v7 JSON (folders → snippets with text + html), same shape as the import format. */
+  function toExportJson(data) {
     return {
       version: 7,
       folders: normalize(data).folders.map((f) => ({
@@ -101,7 +101,7 @@
   }
 
   FB.storage = {
-    KEY, SETTINGS_KEY, uid, normalize, load, save, flatten, mergeImport, toTextBlaze,
+    KEY, SETTINGS_KEY, uid, normalize, load, save, flatten, mergeImport, toExportJson,
     normalizeSettings, loadSettings, saveSettings,
   };
 })();

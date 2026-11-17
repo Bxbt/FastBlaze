@@ -154,5 +154,5 @@
     };
   }
 
-  FB.ui = { showForm, toast, flash, progress };
+  FB.ui = { showForm, toast, flash, progress, mount, el, STYLE };
 })();
