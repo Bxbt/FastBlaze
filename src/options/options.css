@@ -411,15 +411,16 @@ dialog#settings { width: min(560px, calc(100vw - 32px)); max-height: calc(100vh 
 /* ---------- blocks view ---------- */
 .seg-sm .seg-btn { padding: 5px 12px; font-size: 12.5px; }
 .blocks {
-  display: flex; flex-wrap: wrap; align-items: center; align-content: flex-start; gap: 8px 6px;
-  min-height: 100%; padding: 16px 18px 40px;
+  position: relative; display: block; min-height: 100%; padding: 16px 18px 60px; outline: none;
+  font-size: 15px; line-height: 2.15; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--fg);
+  caret-color: var(--focus);
 }
-.blocks:focus { outline: none; }
-.blocks.empty::before { content: 'Add commands from the panel on the right, or switch to Code to type.'; color: var(--muted); font-size: 13px; }
-.blk-break { flex-basis: 100%; height: 0; }
+.blocks.empty::before { content: 'Text that will be inserted when the shortcut is typed\2026'; color: var(--muted); pointer-events: none; position: absolute; }
+.drop-caret { display: inline-block; width: 2px; height: 1.4em; margin: 0 1px; background: var(--flame); vertical-align: middle; border-radius: 1px; }
 .blk {
   position: relative; display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
-  padding: 5px 12px; border-radius: 999px; font-size: 13.5px; line-height: 1.35;
+  padding: 3px 12px; margin: 2px 2px; border-radius: 999px; font-size: 13.5px; line-height: 1.35;
+  vertical-align: middle; white-space: nowrap;
   border: 1.5px solid var(--border); background: var(--panel); cursor: pointer; user-select: none;
   transition: box-shadow .12s, transform .12s;
 }
@@ -454,8 +455,6 @@ dialog#settings { width: min(560px, calc(100vw - 32px)); max-height: calc(100vh 
 .blk-x:hover { background: var(--danger); border-color: var(--danger); color: #fff; }
 .blk.drop-before { box-shadow: -4px 0 0 -1px var(--flame); }
 .blk.drop-after { box-shadow: 4px 0 0 -1px var(--flame); }
-.blk-end { flex: 1; min-width: 60px; align-self: stretch; min-height: 30px; border-radius: 8px; }
-.blk-end.drop-end { box-shadow: inset 4px 0 0 -1px var(--flame); }
 .blk-edit {
   font: inherit; font-size: 13.5px; padding: 5px 10px; border-radius: 8px; border: 1.5px solid var(--focus);
   background: var(--panel); color: var(--fg); width: auto;

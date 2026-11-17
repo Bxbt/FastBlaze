@@ -506,12 +506,19 @@
   const ta = $('f-text');
   let taTouched = false;
 
-  // ---------- blocks view: commands as chips you can drag, click to edit ----------
+  // ---------- blocks view: inline editor (type text, commands are chips) ----------
+  // The textarea (#f-text) stays the source of truth; this view converts both ways:
+  //   template -> DOM: text nodes, <br> (real newline), <br class="cont"> (visual
+  //   line continuation), chip <span contenteditable=false data-src="{...}">
+  //   DOM -> template: serializeRich()
   let view = 'blocks';
   try { view = localStorage.getItem('fastblaze.editorView') || 'blocks'; } catch { /* ignore */ }
-  let selectedItem = -1; // index into the current items list
-  let dragItem = null;
-  let blockItems = [];
+  let selectedItem = -1; // kept for compatibility with select()
+  let dragChip = null;
+  let lastRange = null;
+  let syncingFromRich = false;
+  const rich = $('blocks');
+  const ZW = /[​﻿]/g;
 
   const CMD_ICON = {
     click: 'mouse', select: 'list', clear: 'eraser', key: 'keycap', wait: 'clock',
@@ -519,25 +526,7 @@
     thaiid: 'idcard', 'random-number': 'dice', import: 'fileplus', thaiphone: 'phone', thainame: 'user',
     email: 'mail', date: 'calendar', zipcode: 'pin', bankaccount: 'bank', randomtext: 'text',
   };
-  const unescapeText = (s) => s.replace(/\\([\s\S])/g, '$1');
   const escapeText = (s) => s.replace(/[\\{}]/g, '\\$&');
-
-  /** Source split into chip items: text runs, commands and line breaks (with offsets). */
-  function itemsOf(src) {
-    const items = [];
-    let pos = 0;
-    for (const t of FB.tokenizeTemplate(src)) {
-      const start = pos;
-      pos += t.text.length;
-      if (t.kind === 'text' || t.kind === 'escape') {
-        const last = items[items.length - 1];
-        if (last && last.type === 'text') { last.end = pos; last.raw += t.text; continue; }
-        items.push({ type: 'text', start, end: pos, raw: t.text });
-      } else if (t.kind === 'cont') items.push({ type: 'break', start, end: pos });
-      else items.push({ type: 'cmd', start, end: pos, token: t });
-    }
-    return items;
-  }
 
   /** Muted keyword + bold value pairs shown on a chip. */
   function chipParts(t) {
@@ -571,172 +560,204 @@
     return { icon: CMD_ICON[n.name] || 'help', parts: parts.filter(Boolean) };
   }
 
-  const hadFormatting = (src) => FB.tokenizeTemplate(src).some((t) => t.kind === 'cont');
-
-  /** Write a new template from the blocks view (keeps one-per-line formatting if it was used). */
-  function setTemplate(src, keepFormat) {
-    const compact = FB.compactTemplate(src);
-    ta.value = keepFormat ? FB.formatTemplate(compact) : compact;
-    afterTextChange();
-  }
-
-  function moveItem(item, offset) {
-    const src = ta.value;
-    if (offset >= item.start && offset <= item.end) return;
-    const keep = hadFormatting(src);
-    const text = src.slice(item.start, item.end);
-    const without = src.slice(0, item.start) + src.slice(item.end);
-    const at = offset > item.start ? offset - text.length : offset;
-    selectedItem = -1;
-    setTemplate(without.slice(0, at) + text + without.slice(at), keep);
-  }
-
-  function removeItem(item) {
-    const src = ta.value;
-    selectedItem = -1;
-    setTemplate(src.slice(0, item.start) + src.slice(item.end), hadFormatting(src));
-  }
-
-  function replaceRange(start, end, text) {
-    const src = ta.value;
-    setTemplate(src.slice(0, start) + text + src.slice(end), hadFormatting(src));
-  }
-
-  /** Insert after the selected chip, or at the end. */
-  function blocksInsert(text) {
-    const src = ta.value;
-    const sel = blockItems[selectedItem];
-    const at = sel ? sel.end : src.length;
-    replaceRange(at, at, text);
-    const idx = itemsOf(ta.value).findIndex((it) => it.start === at && it.type !== 'break');
-    selectedItem = idx;
-    renderBlocks();
-  }
-
-  function clearBlockMarks() {
-    document.querySelectorAll('#blocks .drop-before, #blocks .drop-after, #blocks .drop-end')
-      .forEach((n) => n.classList.remove('drop-before', 'drop-after', 'drop-end'));
-  }
-
-  function dragHandlers(chip, item) {
-    chip.draggable = true;
-    chip.addEventListener('dragstart', (e) => {
-      dragItem = item;
-      e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('text/plain', '');
-      requestAnimationFrame(() => chip.classList.add('dragging'));
-    });
-    chip.addEventListener('dragend', () => { chip.classList.remove('dragging'); clearBlockMarks(); dragItem = null; });
-    chip.addEventListener('dragover', (e) => {
-      if (!dragItem) return;
-      e.preventDefault();
-      const r = chip.getBoundingClientRect();
-      clearBlockMarks();
-      chip.classList.add(e.clientX > r.left + r.width / 2 ? 'drop-after' : 'drop-before');
-    });
-    chip.addEventListener('drop', (e) => {
-      if (!dragItem) return;
-      e.preventDefault();
-      const after = chip.classList.contains('drop-after');
-      const moving = dragItem;
-      clearBlockMarks();
-      dragItem = null;
-      moveItem(moving, after ? item.end : item.start);
-    });
-  }
-
-  function deleteButton(item) {
-    const x = el('button', { type: 'button', className: 'blk-x', title: 'Remove', textContent: '×' });
-    x.addEventListener('mousedown', (e) => e.stopPropagation());
-    x.addEventListener('click', (e) => { e.stopPropagation(); removeItem(item); });
-    return x;
-  }
-
-  function textChip(item, i) {
-    const value = unescapeText(item.raw);
-    const chip = el('span', { className: `blk blk-text${i === selectedItem ? ' selected' : ''}`, title: 'Click to edit text, drag to move' }, [
-      el('span', { className: 'blk-label', textContent: value.replace(/\n/g, ' ⏎ ') }),
-      deleteButton(item),
-    ]);
-    chip.addEventListener('click', () => editText(chip, item, value));
-    dragHandlers(chip, item);
-    return chip;
-  }
-
-  function editText(chip, item, value) {
-    const multi = value.includes('\n');
-    const input = el(multi ? 'textarea' : 'input', { className: 'blk-edit', value, rows: multi ? 3 : undefined });
-    input.style.width = `${Math.max(80, Math.min(520, chip.getBoundingClientRect().width + 40))}px`;
-    chip.replaceWith(input);
-    input.focus();
-    input.select();
-    let done = false;
-    const commit = (save) => {
-      if (done) return;
-      done = true;
-      if (save && input.value !== value) replaceRange(item.start, item.end, escapeText(input.value));
-      else renderBlocks();
-    };
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && (!multi || e.metaKey || e.ctrlKey)) { e.preventDefault(); commit(true); }
-      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); commit(false); }
-    });
-    input.addEventListener('blur', () => commit(true));
-  }
-
-  function cmdChip(item, i) {
-    const t = item.token;
+  /** A non-editable, draggable chip for one command. */
+  function makeChip(raw) {
+    const t = FB.tokenizeTemplate(raw)[0];
     const { icon, parts } = chipParts(t);
+    const x = el('span', { className: 'blk-x', title: 'Remove', textContent: '×' });
     const chip = el('span', {
-      className: `blk blk-cmd blk-${t.kind}${i === selectedItem ? ' selected' : ''}`,
-      title: t.kind === 'unknown' ? `Unknown command: ${t.text}` : `${t.text}\nClick to edit, drag to move`,
+      className: `blk blk-cmd blk-${t.kind}`,
+      contentEditable: 'false',
+      draggable: true,
+      title: t.kind === 'unknown' ? `Unknown command: ${raw}` : `${raw}\nClick to edit · drag to move`,
     }, [
       FB.icon(icon),
       ...parts.flatMap(([k, v]) => [el('span', { className: 'blk-k', textContent: k }), ...(v ? [el('span', { className: 'blk-v', textContent: v })] : [])]),
-      deleteButton(item),
+      x,
     ]);
-    chip.addEventListener('click', () => {
-      selectedItem = i;
-      renderBlocks();
-      editCommand(item);
-    });
-    dragHandlers(chip, item);
+    chip.dataset.src = raw;
     return chip;
   }
 
-  function renderBlocks() {
-    if (view !== 'blocks') return;
-    blockItems = itemsOf(ta.value);
-    if (selectedItem >= blockItems.length) selectedItem = -1;
-    const nodes = blockItems.map((item, i) => {
-      if (item.type === 'break') return el('span', { className: 'blk-break' });
-      return item.type === 'text' ? textChip(item, i) : cmdChip(item, i);
-    });
-    const end = el('span', { className: 'blk-end', title: 'Drop here to move to the end' });
-    end.addEventListener('dragover', (e) => { if (dragItem) { e.preventDefault(); clearBlockMarks(); end.classList.add('drop-end'); } });
-    end.addEventListener('drop', (e) => {
-      if (!dragItem) return;
-      e.preventDefault();
-      const moving = dragItem;
-      clearBlockMarks();
-      dragItem = null;
-      moveItem(moving, ta.value.length);
-    });
-    const box = $('blocks');
-    box.replaceChildren(...nodes, end);
-    box.classList.toggle('empty', !blockItems.length);
+  /** Template text -> DOM nodes (used for rendering and for paste). */
+  function templateNodes(src) {
+    const nodes = [];
+    let pos = 0;
+    for (const t of FB.tokenizeTemplate(src)) {
+      const start = pos;
+      pos += t.text.length;
+      if (t.kind === 'text') {
+        t.text.split('\n').forEach((line, i) => {
+          if (i) nodes.push(document.createElement('br'));
+          if (line) nodes.push(document.createTextNode(line));
+        });
+      } else if (t.kind === 'escape') nodes.push(document.createTextNode(t.text.slice(1)));
+      else if (t.kind === 'cont') nodes.push(el('br', { className: 'cont' }));
+      else {
+        const chip = makeChip(t.text);
+        chip.dataset.start = String(start);
+        nodes.push(chip);
+      }
+    }
+    return nodes;
   }
 
-  $('blocks').addEventListener('click', (e) => {
-    if (e.target === $('blocks') || e.target.classList.contains('blk-end')) {
-      if (selectedItem !== -1) { selectedItem = -1; renderBlocks(); }
+  /** DOM -> template text. */
+  function serializeRich(root) {
+    let out = '';
+    const walk = (node) => {
+      for (const n of node.childNodes) {
+        if (n.nodeType === Node.TEXT_NODE) out += escapeText(n.data.replace(ZW, ''));
+        else if (n.nodeType !== Node.ELEMENT_NODE) continue;
+        else if (n.classList.contains('drop-caret')) continue;
+        else if (n.dataset && n.dataset.src != null) out += n.dataset.src;
+        else if (n.tagName === 'BR') {
+          // Chrome adds a trailing <br> so an empty last line stays visible; ignore it.
+          if (!n.nextSibling && n.parentNode === root && !n.classList.contains('cont') && out.endsWith('\n')) continue;
+          out += n.classList.contains('cont') ? '\\\n' : '\n';
+        } else if (n.tagName === 'DIV' || n.tagName === 'P') {
+          if (out && !out.endsWith('\n')) out += '\n';
+          walk(n);
+        } else walk(n);
+      }
+    };
+    walk(root);
+    // An "empty" editor in Chrome is just a placeholder <br>.
+    if (out === '\n' && root.childNodes.length === 1) return '';
+    return out;
+  }
+
+  function renderBlocks() {
+    if (view !== 'blocks' || syncingFromRich) return;
+    const nodes = templateNodes(ta.value);
+    // A trailing <br> needs a second one so the empty last line is visible.
+    if (nodes.length && nodes[nodes.length - 1].tagName === 'BR') nodes.push(document.createElement('br'));
+    rich.replaceChildren(...nodes);
+    rich.classList.toggle('empty', !ta.value);
+    lastRange = null;
+  }
+
+  /** Push the editor content back into the template. */
+  function syncFromRich() {
+    const src = serializeRich(rich);
+    rich.classList.toggle('empty', !src);
+    if (src === ta.value) return;
+    ta.value = src;
+    syncingFromRich = true;
+    try { afterTextChange(); } finally { syncingFromRich = false; }
+  }
+
+  function saveRange() {
+    const sel = window.getSelection();
+    if (sel.rangeCount && rich.contains(sel.getRangeAt(0).startContainer)) lastRange = sel.getRangeAt(0).cloneRange();
+  }
+
+  function placeCaretAfter(node) {
+    const r = document.createRange();
+    r.setStartAfter(node);
+    r.collapse(true);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(r);
+    lastRange = r.cloneRange();
+  }
+
+  /** Insert template text (commands become chips) at the caret, or at the end. */
+  function blocksInsert(text) {
+    rich.focus();
+    let range = lastRange;
+    if (!range || !rich.contains(range.startContainer)) {
+      range = document.createRange();
+      range.selectNodeContents(rich);
+      range.collapse(false);
+    }
+    range.deleteContents();
+    const nodes = templateNodes(text);
+    const frag = document.createDocumentFragment();
+    nodes.forEach((n) => frag.append(n));
+    const last = nodes[nodes.length - 1];
+    range.insertNode(frag);
+    if (last) placeCaretAfter(last);
+    syncFromRich();
+  }
+
+  // Typing, deleting, Enter, paste
+  rich.addEventListener('input', syncFromRich);
+  rich.addEventListener('keyup', saveRange);
+  rich.addEventListener('mouseup', saveRange);
+  rich.addEventListener('blur', saveRange);
+  rich.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      document.execCommand('insertLineBreak');
     }
   });
-  $('blocks').addEventListener('keydown', (e) => {
-    const item = blockItems[selectedItem];
-    if (!item || e.target !== $('blocks')) return;
-    if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); removeItem(item); }
-    else if (e.key === 'Escape') { selectedItem = -1; renderBlocks(); }
+  rich.addEventListener('paste', (e) => {
+    const text = e.clipboardData.getData('text/plain');
+    if (!text) return;
+    e.preventDefault();
+    saveRange();
+    blocksInsert(text);
+  });
+  rich.addEventListener('drop', (e) => { if (!dragChip) e.preventDefault(); }, true); // no foreign drops
+
+  // Chip clicks: × removes, otherwise edit in the side panel
+  rich.addEventListener('mousedown', (e) => {
+    if (e.target.closest('.blk-x')) e.preventDefault();
+  });
+  rich.addEventListener('click', (e) => {
+    const chip = e.target.closest('.blk-cmd');
+    if (!chip) return;
+    if (e.target.closest('.blk-x')) {
+      chip.remove();
+      syncFromRich();
+      return;
+    }
+    rich.querySelectorAll('.blk.selected').forEach((c) => c.classList.remove('selected'));
+    chip.classList.add('selected');
+    placeCaretAfter(chip);
+    editCommand(chip);
+  });
+
+  // Drag a chip to any caret position in the text
+  let dropMarker = null;
+  function clearDrop() {
+    if (dropMarker) dropMarker.remove();
+    dropMarker = null;
+  }
+  rich.addEventListener('dragstart', (e) => {
+    const chip = e.target.closest && e.target.closest('.blk-cmd');
+    if (!chip) { e.preventDefault(); return; }
+    dragChip = chip;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', chip.dataset.src);
+    requestAnimationFrame(() => chip.classList.add('dragging'));
+  });
+  rich.addEventListener('dragend', () => {
+    if (dragChip) dragChip.classList.remove('dragging');
+    dragChip = null;
+    clearDrop();
+  });
+  rich.addEventListener('dragover', (e) => {
+    if (!dragChip) return;
+    e.preventDefault();
+    const r = document.caretRangeFromPoint(e.clientX, e.clientY);
+    if (!r || !rich.contains(r.startContainer) || dragChip.contains(r.startContainer)) return;
+    if (!dropMarker) dropMarker = el('span', { className: 'drop-caret', contentEditable: 'false' });
+    r.insertNode(dropMarker);
+  });
+  rich.addEventListener('drop', (e) => {
+    if (!dragChip) return;
+    e.preventDefault();
+    const chip = dragChip;
+    dragChip = null;
+    chip.classList.remove('dragging');
+    if (dropMarker && dropMarker.parentNode) {
+      dropMarker.replaceWith(chip);
+      dropMarker = null;
+    } else clearDrop();
+    placeCaretAfter(chip);
+    syncFromRich();
   });
 
   function setView(v) {
@@ -744,7 +765,7 @@
     try { localStorage.setItem('fastblaze.editorView', v); } catch { /* ignore */ }
     $('view-blocks').setAttribute('aria-pressed', String(v === 'blocks'));
     $('view-code').setAttribute('aria-pressed', String(v === 'code'));
-    $('blocks').hidden = v !== 'blocks';
+    rich.hidden = v !== 'blocks';
     $('code-wrap').hidden = v !== 'code';
     closeAc();
     if (v === 'blocks') renderBlocks();
@@ -752,6 +773,7 @@
   }
   $('view-blocks').addEventListener('click', () => setView('blocks'));
   $('view-code').addEventListener('click', () => setView('code'));
+
 
 
   function highlight() {
@@ -865,10 +887,15 @@
     if (!src) return;
     setMode('edit');
     if (view === 'blocks') {
-      selectedItem = blockItems.findIndex((it) => it.type !== 'break' && src.start >= it.start && src.start < it.end);
       renderBlocks();
-      const chip = $('blocks').querySelector('.blk.selected');
-      if (chip) { chip.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); chip.classList.add('flash'); }
+      const chips = [...rich.querySelectorAll('.blk-cmd')];
+      const chip = chips.find((c) => Number(c.dataset.start) === src.start)
+        || chips.find((c) => Number(c.dataset.start) <= src.start && src.start < Number(c.dataset.start) + c.dataset.src.length);
+      if (chip) {
+        chip.classList.add('selected', 'flash');
+        chip.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        placeCaretAfter(chip);
+      }
       return;
     }
     ta.focus();
@@ -1347,8 +1374,9 @@
     randomtext: (a) => ({ length: a.length ?? a._[0] ?? '8', type: a.type ?? 'alnum' }),
   };
 
-  function editCommand(item) {
-    const n = item.token.node;
+  function editCommand(chip) {
+    const raw = chip.dataset.src;
+    const n = FB.tokenizeTemplate(raw)[0].node;
     let def;
     let vals;
     if (n.type === 'assign') { def = COMMANDS.find((c) => c.id === 'var'); vals = { name: n.name, value: n.value.raw ?? '' }; }
@@ -1360,16 +1388,26 @@
     }
     if (!def || !vals) {
       // No form for this command: edit it as code.
+      const at = ta.value.indexOf(raw);
       setView('code');
       ta.focus();
-      ta.setSelectionRange(item.start, item.end);
+      if (at !== -1) ta.setSelectionRange(at, at + raw.length);
       return;
     }
-    openCommand(def, { start: item.start, end: item.end, vals });
+    openCommand(def, {
+      vals,
+      apply: (text) => {
+        if (!chip.isConnected) return insertAtCursor(text);
+        const fresh = templateNodes(text);
+        chip.replaceWith(...fresh);
+        if (fresh.length) placeCaretAfter(fresh[fresh.length - 1]);
+        syncFromRich();
+      },
+    });
   }
 
   // Config view for one command: sections with title + description + control.
-  // edit = { start, end, vals } when changing an existing command chip.
+  // edit = { vals, apply(text) } when changing an existing command chip.
   function openCommand(c, edit) {
     const panel = $('cmd-config');
     for (const n of document.querySelectorAll('.commands > .cmd-search, .commands > .cmd-list, .commands > .cmd-footer')) n.hidden = true;
@@ -1528,7 +1566,7 @@
       }
       const text = c.build(vals);
       showList();
-      if (edit) replaceRange(edit.start, edit.end, text);
+      if (edit) edit.apply(text);
       else insertAtCursor(text);
     });
 

@@ -23,10 +23,13 @@ After editing code: click ↻ on the extension card, then reload the page.
 - **Pick** (popup button or `Alt+Shift+P`): hover an element (yellow box), click it
   to get ranked selectors (stable / ok / fragile). The best command is copied and
   available as **Insert picked** in the editor. `↑`/`↓` = parent/child, `Esc` = cancel.
-- **Blocks** view (default): each command is a chip (icon + key values), text is a
-  dashed chip. Drag chips to reorder, click a command chip to edit it in the panel
-  (Update), click text to edit in place, × or Delete to remove. **Code** view shows the
-  raw template with syntax highlight.
+- **Blocks** view (default): an inline editor like a document. Type text directly;
+  commands are chips (icon + key values) placed at the caret from the Dynamic commands
+  panel. Drag a chip anywhere in the text, click it to edit in the panel (Update),
+  Backspace or × removes it, Enter adds a line, pasting `{…}` text creates chips.
+  **Code** view shows the raw template with syntax highlight.
+- Selectors can pierce shadow DOM with `|>`: `{click: selector=#editor |> .input}`;
+  Pick builds these automatically for elements inside web components.
 - Options page: welcome page with a try-out box. Snippet editor with Label / Shortcut
   fields, **Try it out** popover, **Edit / Preview** switch, syntax-highlighted
   template, **Format** (one command per line using `\` line continuations, same
