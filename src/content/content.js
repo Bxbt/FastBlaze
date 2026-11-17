@@ -172,6 +172,17 @@
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (!msg || !alive() || window !== window.top) return;
+    if (msg.type === 'fastblaze:rec-begin') {
+      if (FB.picker) FB.picker.stop();
+      FB.recorder.begin({ count: msg.count || 0 });
+      sendResponse({ ok: true });
+      return;
+    }
+    if (msg.type === 'fastblaze:rec-end') {
+      FB.recorder.end();
+      sendResponse({ ok: true });
+      return;
+    }
     if (msg.type === 'fastblaze:pick-stop') {
       FB.picker.stop();
       sendResponse({ ok: true });
@@ -196,4 +207,5 @@
   });
 
   FB.runSnippet = runSnippet;
+  FB.isBusy = () => busy; // recorder ignores events FastBlaze itself causes
 })();

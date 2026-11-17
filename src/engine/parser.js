@@ -123,7 +123,7 @@
     return nodes;
   }
 
-  const ACTION_CMDS = new Set(['click', 'select', 'clear', 'wait', 'key']);
+  const ACTION_CMDS = new Set(['click', 'select', 'clear', 'wait', 'key', 'waitfor']);
   const FORM_CMDS = new Set(['formtext', 'formmenu', 'formparagraph']);
   const DATA_CMDS = new Set(['thaiid', 'random-number', 'thaiphone', 'thainame', 'email', 'date', 'zipcode', 'bankaccount', 'randomtext']);
 
@@ -192,19 +192,20 @@
   const isBlockToken = (t) => t && !['text', 'escape', 'cont'].includes(t.kind);
 
   /**
-   * One command per line using "\" continuations. Breaks before a block that
-   * directly follows another block, and before every action command, except
-   * {wait} / {key}, which stay next to the step before them.
-   * Running the result gives exactly the same output as the input.
+   * Readable layout using "\\" continuations: one element action ({click} /
+   * {select}) per line, plus one assignment per line. Output is unchanged.
    */
   function formatTemplate(src) {
     const tokens = tokenizeTemplate(compactTemplate(src));
     let out = '';
     tokens.forEach((t, i) => {
       const prev = tokens[i - 1];
-      // {wait} / {key} stay on the line of the step they belong to.
-      const trailing = t.name === 'wait' || t.name === 'key';
-      if (i > 0 && isBlockToken(t) && !trailing && (isBlockToken(prev) || t.kind === 'action')) out += '\\\n';
+      // New line before every element action ({click} / {select}) and between
+      // consecutive variable assignments. Everything else ({clear}, {wait}, {key},
+      // fields, generators...) stays on the line of the step it belongs to.
+      const stepStart = t.name === 'click' || t.name === 'select' || t.name === 'waitfor';
+      const assignRun = t.node && t.node.type === 'assign' && isBlockToken(prev);
+      if (i > 0 && isBlockToken(t) && (stepStart || assignRun)) out += '\\\n';
       out += t.text;
     });
     return out;

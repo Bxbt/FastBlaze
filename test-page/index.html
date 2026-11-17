@@ -39,6 +39,10 @@
   </select>
   <label>Shadow DOM editor (selector: #editor |&gt; .input)</label>
   <fb-editor id="editor"></fb-editor>
+  <label>Slow area (smart wait test)</label>
+  <div id="slow" style="position:relative;border:1px dashed #94a3b8;padding:10px;min-height:44px">
+    <button type="button" id="load">Load</button> <span id="slow-status"></span>
+  </div>
   <label>Notes (textarea)</label><textarea data-testid="input-notes" rows="3"></textarea>
   <label>Rich text (contenteditable)</label>
   <div contenteditable="true" data-testid="rich" style="border:1px solid #999;min-height:40px;padding:6px"></div>
@@ -55,6 +59,32 @@
           + '<input class="input" placeholder="inside shadow root"><button class="send" type="button">Send</button>';
         root.querySelector('.send').addEventListener('click', () => { state.shadowSent = root.querySelector('.input').value; show(); });
       }
+    });
+    // Slow UI: spinner 1.2s -> Submit appears sliding in, disabled 0.5s, covered by an overlay 0.4s more.
+    window.slowLog = [];
+    document.getElementById('load').addEventListener('click', () => {
+      const box = document.getElementById('slow');
+      const status = document.getElementById('slow-status');
+      status.innerHTML = '<span class="spinner">Loading…</span>';
+      slowLog.push(['load', Date.now()]);
+      setTimeout(() => {
+        status.textContent = '';
+        const btn = document.createElement('button');
+        btn.id = 'submit'; btn.type = 'button'; btn.textContent = 'Submit'; btn.disabled = true;
+        btn.style.cssText = 'position:relative;left:200px;transition:left .3s';
+        btn.addEventListener('click', () => { slowLog.push(['submit', Date.now()]); status.textContent = 'บันทึกสำเร็จ'; });
+        box.append(btn);
+        requestAnimationFrame(() => { btn.style.left = '0px'; });
+        setTimeout(() => {
+          btn.disabled = false;
+          const cover = document.createElement('div');
+          cover.className = 'cover';
+          cover.style.cssText = 'position:absolute;inset:0;background:rgba(255,255,255,.6)';
+          box.append(cover);
+          slowLog.push(['enabled', Date.now()]);
+          setTimeout(() => { cover.remove(); slowLog.push(['ready', Date.now()]); }, 400);
+        }, 500);
+      }, 1200);
     });
     // Simulates a framework-controlled form: state only updates from input events.
     const state = {};
@@ -103,7 +133,7 @@
       const files = ['chrome-mock.js', '../src/engine/expr.js', '../src/engine/parser.js', '../src/engine/thaiid.js', '../src/engine/generators.js',
         '../src/engine/runner.js', '../src/shared/defaults.js', '../src/shared/storage.js',
         '../src/content/dom.js', '../src/content/ui.js', '../src/content/sound.js', '../src/content/selector.js', '../src/content/picker.js',
-        '../src/content/content.js'];
+        '../src/content/content.js', '../src/engine/recording.js', '../src/content/recorder.js'];
       (function next(i) {
         if (i >= files.length) return;
         const s = document.createElement('script');

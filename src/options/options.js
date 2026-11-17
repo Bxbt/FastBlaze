@@ -521,7 +521,7 @@
   const ZW = /[​﻿]/g;
 
   const CMD_ICON = {
-    click: 'mouse', select: 'list', clear: 'eraser', key: 'keycap', wait: 'clock',
+    click: 'mouse', select: 'list', clear: 'eraser', key: 'keycap', wait: 'clock', waitfor: 'hourglass',
     formtext: 'textfield', formmenu: 'dropdown', formparagraph: 'paragraph',
     thaiid: 'idcard', 'random-number': 'dice', import: 'fileplus', thaiphone: 'phone', thainame: 'user',
     email: 'mail', date: 'calendar', zipcode: 'pin', bankaccount: 'bank', randomtext: 'text',
@@ -539,7 +539,12 @@
     let parts;
     switch (n.name) {
       case 'click': parts = [a.text != null ? P('text', a.text) : P('selector', a.selector ?? a._[0]), P('max', a.maxdelay)]; break;
-      case 'wait': parts = [P('delay', `+${a.delay ?? a._[0] ?? '500ms'}`)]; break;
+      case 'wait': {
+        const v = a.delay ?? a._[0] ?? '500ms';
+        parts = /^idle$/i.test(String(v).trim()) ? [['wait', 'until idle']] : [P('delay', `+${v}`)];
+        break;
+      }
+      case 'waitfor': parts = [[a.state === 'gone' ? 'until gone' : 'wait for', a.text ?? a.selector ?? a._[0] ?? ''], a.text != null ? P('in', a.selector) : null, P('max', a.maxdelay)]; break;
       case 'key': parts = [P('key', a.key ?? a._[0])]; break;
       case 'select': parts = [P('select', a.text ?? a.value ?? (a.index != null ? `#${a.index}` : '')), P('in', a.selector)]; break;
       case 'clear': parts = [P('clear', a.selector ?? a._[0] ?? 'focused field')]; break;
@@ -1001,6 +1006,11 @@
 
   const COMMANDS = [
     {
+      id: 'record', group: 'Automation', frequent: true, icon: 'record', title: 'Record from website',
+      desc: 'Record clicks and typing on a page into steps', keywords: 'record macro capture flow',
+      special: 'record', fields: [], build: () => '',
+    },
+    {
       id: 'click', group: 'Automation', frequent: true, icon: 'mouse', title: 'Click element',
       desc: 'Click an element on the page, then type into it', keywords: 'button selector testid tap pick',
       fields: [
@@ -1050,12 +1060,42 @@
     },
     {
       id: 'wait', group: 'Automation', icon: 'clock', title: 'Wait',
-      desc: 'Pause before the next step', keywords: 'delay sleep pause',
+      desc: 'Pause, or wait until the page stops changing', keywords: 'delay sleep pause idle',
       fields: [
-        { key: 'amount', label: 'Duration', short: 'Amount', type: 'number', required: true, value: '500', row: 'dur', desc: 'Pause before running the next step.' },
-        { key: 'unit', label: 'Unit', type: 'select', options: [['ms', 'Milliseconds'], ['s', 'Seconds']], value: 'ms', row: 'dur' },
+        { key: 'mode', label: 'Wait', type: 'select', value: 'idle',
+          options: [['idle', 'Until the page stops changing (recommended)'], ['time', 'A fixed time']],
+          desc: (v) => (v.mode === 'idle'
+            ? 'Continues as soon as nothing on the page has changed for a short moment (gives up after 10 s). No guessing a delay.'
+            : 'Always waits this long, even when the page is ready sooner.') },
+        { key: 'amount', label: 'Duration', short: 'Amount', type: 'number', required: true, value: '500', row: 'dur', show: (v) => v.mode === 'time' },
+        { key: 'unit', label: 'Unit', type: 'select', options: [['ms', 'Milliseconds'], ['s', 'Seconds']], value: 'ms', row: 'dur', show: (v) => v.mode === 'time' },
       ],
-      build: (v) => `{wait: ${Number(v.amount)}${v.unit}}`,
+      build: (v) => (v.mode === 'idle' ? '{wait: idle}' : `{wait: ${Number(v.amount)}${v.unit}}`),
+    },
+    {
+      id: 'waitfor', group: 'Automation', frequent: false, icon: 'hourglass', title: 'Wait for element',
+      desc: 'Wait until something appears or disappears', keywords: 'wait load loading spinner appear disappear until',
+      fields: [
+        { key: 'value', type: 'element', label: 'Element', required: true,
+          desc: 'What to wait for. Select it on a web page, or type a CSS selector.' },
+        { key: 'state', label: 'Wait until it', type: 'select', value: 'visible',
+          options: [['visible', 'Appears'], ['gone', 'Disappears (e.g. a loading spinner)']] },
+        { key: 'maxdelay', label: 'Max delay', short: 'Time', type: 'number', row: 'md',
+          desc: () => `Stops with an error if it takes longer. Leave empty to use Settings (${Math.round(currentSettings.timeout / 100) / 10}s).` },
+        { key: 'unit', label: 'Unit', type: 'select', options: [['s', 'Seconds'], ['ms', 'Milliseconds']], value: 's', row: 'md' },
+        { key: 'by', label: 'Find the element by', type: 'select', advanced: true,
+          options: [['selector', 'CSS selector'], ['text', 'Visible text']], value: 'selector',
+          desc: 'Visible text is handy for messages like "บันทึกสำเร็จ".' },
+        { key: 'within', label: 'Only inside (CSS selector)', mono: true, advanced: true, show: (v) => v.by === 'text' },
+      ],
+      build: (v) => {
+        const target = v.by === 'text'
+          ? `text=${tplArg(v.value)}${v.within ? `; selector=${tplArg(v.within)}` : ''}`
+          : `selector=${tplArg(v.value)}`;
+        const state = v.state === 'gone' ? '; state=gone' : '';
+        const delay = v.maxdelay !== '' && v.maxdelay != null ? `; maxdelay=${Number(v.maxdelay)}${v.unit}` : '';
+        return `{waitfor: ${target}${state}${delay}}`;
+      },
     },
     {
       id: 'formtext', group: 'Forms', icon: 'textfield', title: 'Text field',
@@ -1247,7 +1287,7 @@
         el('span', { className: 'cmd-icon' }, [FB.icon(c.icon)]),
         el('span', {}, [el('strong', { textContent: c.title }), el('span', { className: 'desc', textContent: c.desc })]),
       ]);
-      b.addEventListener('click', () => openCommand(c));
+      b.addEventListener('click', () => (c.special === 'record' ? openRecordPanel() : openCommand(c)));
       return b;
     };
     const nodes = [];
@@ -1319,6 +1359,78 @@
     done((p.candidates && p.candidates[0]) || null);
   });
 
+  // ---------- Record from website (Manage page) ----------
+  const LAST_RECORDING_KEY = 'fastblaze.lastRecording';
+  let recWaiter = null; // { since, done(template) }
+
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local' || !changes[LAST_RECORDING_KEY] || !recWaiter) return;
+    const r = changes[LAST_RECORDING_KEY].newValue;
+    if (!r || r.at < recWaiter.since) return;
+    const { done } = recWaiter;
+    recWaiter = null;
+    done(r);
+  });
+
+  function cancelRecording() {
+    recWaiter = null;
+    if (chrome.runtime && chrome.runtime.sendMessage) chrome.runtime.sendMessage({ type: 'fastblaze:rec-cancel' }).catch(() => {});
+  }
+
+  function openRecordPanel() {
+    const panel = $('cmd-config');
+    for (const n of document.querySelectorAll('.commands > .cmd-search, .commands > .cmd-list, .commands > .cmd-footer')) n.hidden = true;
+    panel.hidden = false;
+    let waiting = !!recWaiter;
+
+    const back = el('button', { type: 'button', className: 'icon-only ghost-btn', title: 'Back to commands' }, [FB.icon('back')]);
+    back.addEventListener('click', () => { if (waiting) cancelRecording(); showList(); });
+    const body = el('div', { className: 'cfg-body' });
+    panel.replaceChildren(el('div', { className: 'cfg-head' }, [back, FB.icon('record'), el('strong', { textContent: 'Record from website' })]), body);
+
+    function render() {
+      const start = el('button', { type: 'button', className: 'pick-btn' }, [FB.icon('record'), waiting ? 'Recording…' : 'Start recording']);
+      start.disabled = waiting;
+      start.addEventListener('click', startRec);
+      const nodes = [
+        el('div', { className: 'cfg-title', textContent: 'Record steps' }),
+        el('p', { className: 'cfg-desc', textContent: 'Switches to your last tab and records clicks, typing, dropdown choices and Enter. Before your first click you can switch to any other tab. Passwords are never stored.' }),
+        start,
+      ];
+      if (waiting) {
+        const stop = el('button', { type: 'button', className: 'link-btn', textContent: 'Cancel recording' });
+        stop.addEventListener('click', () => { cancelRecording(); waiting = false; render(); });
+        nodes.push(el('p', { className: 'cfg-desc rec-wait' }, ['Use the page, then press ', el('b', { textContent: 'Stop & save' }), ' in the bar at the top of the page. The steps are inserted here at the cursor. ', stop]));
+      }
+      body.replaceChildren(el('section', { className: 'cfg-section' }, nodes));
+    }
+
+    async function startRec() {
+      const since = Date.now();
+      recWaiter = {
+        since,
+        done: (r) => {
+          waiting = false;
+          showList();
+          insertAtCursor(r.template);
+        },
+      };
+      waiting = true;
+      render();
+      if (!chrome.runtime || !chrome.runtime.sendMessage || !chrome.tabs) return; // test harness: wait for storage
+      const me = await chrome.tabs.getCurrent();
+      const res = await chrome.runtime.sendMessage({ type: 'fastblaze:rec-start', fromTabId: me && me.id }).catch((err) => ({ ok: false, error: err.message }));
+      if (!res || !res.ok) {
+        recWaiter = null;
+        waiting = false;
+        render();
+        await FB.dialog.alert({ title: 'Cannot start recording', message: [(res && res.error) || 'Unknown error', '. Open the web page in another tab, then try again.'] });
+      }
+    }
+
+    render();
+  }
+
   // ---------- edit an existing command chip ----------
   const DATE_PRESETS = ['DDMMBBBB', 'DD/MM/BBBB', 'DD/MM/YYYY', 'YYYY-MM-DD', 'D MMMM BBBB', 'D MMM BB'];
   const splitTime = (v, defUnit) => {
@@ -1343,7 +1455,20 @@
     },
     clear: (a) => ({ target: a.selector || a._[0] ? 'selector' : 'focused', selector: a.selector ?? a._[0] ?? '' }),
     key: (a) => ({ key: (a.key ?? a._[0] ?? 'enter').toLowerCase() }),
-    wait: (a) => { const d = splitTime(a.delay ?? a._[0] ?? '500ms', 'ms'); return d ? { amount: d.amount, unit: d.unit } : {}; },
+    wait: (a) => {
+      const v = a.delay ?? a._[0] ?? '500ms';
+      if (/^idle$/i.test(String(v).trim())) return { mode: 'idle' };
+      const d = splitTime(v, 'ms');
+      return d ? { mode: 'time', amount: d.amount, unit: d.unit } : { mode: 'time' };
+    },
+    waitfor: (a) => {
+      const d = splitTime(a.maxdelay, 'ms');
+      return {
+        by: a.text != null ? 'text' : 'selector', value: a.text ?? a.selector ?? a._[0] ?? '',
+        within: a.text != null ? (a.selector ?? '') : '', state: a.state === 'gone' ? 'gone' : 'visible',
+        maxdelay: d ? d.amount : '', unit: d ? d.unit : 's',
+      };
+    },
     formtext: (a) => ({ name: a.name ?? '', default: a.default ?? '', cols: a.cols ?? '' }),
     formparagraph: (a) => ({ name: a.name ?? '', default: a.default ?? '' }),
     formmenu: (a) => ({ name: a.name ?? '', options: [a.default, ...a._].filter((x) => x != null && x !== '').join(', ') }),
@@ -1625,6 +1750,7 @@
 
   FB.storage.load().then((d) => {
     data = d;
-    select(null); // start on the welcome / try-out page
+    const m = location.hash.match(/snippet=([\w-]+)/); // opened after a recording
+    select(m && findSnippet(m[1]) ? m[1] : null);
   });
 })();
