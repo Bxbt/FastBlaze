@@ -52,10 +52,15 @@
 
   const resetTyped = () => { typed = []; typedEl = null; };
 
+  // Pages can restrict expansion to some fields, e.g. the Options page try-out box:
+  // <html data-fastblaze-scope="[data-tryout]">
+  const SCOPE = document.documentElement.dataset.fastblazeScope || null;
+  const inScope = (el) => !SCOPE || !!el.closest(SCOPE);
+
   window.addEventListener('keydown', (e) => {
     if (busy || !e.isTrusted || e.isComposing) return;
     const el = FB.dom.deepActiveElement();
-    if (!FB.dom.isEditable(el)) return resetTyped();
+    if (!FB.dom.isEditable(el) || !inScope(el)) return resetTyped();
     if (el !== typedEl) { typed = []; typedEl = el; }
 
     if (e.key === 'Backspace') { typed.pop(); return; }
@@ -100,7 +105,7 @@
     if (busy || e.isComposing) return;
     if (e.inputType && !e.inputType.startsWith('insert')) return;
     const el = FB.dom.deepActiveElement();
-    if (!FB.dom.isEditable(el)) return;
+    if (!FB.dom.isEditable(el) || !inScope(el)) return;
     setTimeout(() => {
       if (busy || Date.now() - lastTrigger < 300) return; // keystroke path already handled it
       const before = FB.dom.textBeforeCaret(el);
@@ -131,13 +136,17 @@
       const isFlow = actions.length > 1 && actions.some((a) => a.type !== 'text');
       const panel = isFlow ? FB.ui.progress(snippet.name || snippet.shortcut, () => { run.cancelled = true; }) : null;
       currentRun = run;
+      if (FB.sound) FB.sound.trigger(settings.soundVolume);
       try {
         await FB.dom.execute(actions, {
           ...settings,
           run,
-          onStep: (i, n, a) => panel && panel.update(i, n, FB.describeAction(a)),
+          onStep: (i, n, a) => {
+            if (panel) panel.update(i, n, FB.describeAction(a));
+            if (FB.sound && i > 0 && a.type === 'click') FB.sound.step(settings.soundVolume);
+          },
         });
-        if (isFlow) FB.ui.toast(`✓ ${snippet.name || snippet.shortcut} — ${actions.length} steps`, '', 1800);
+        if (isFlow) FB.ui.toast(`Done: ${snippet.name || snippet.shortcut} (${actions.length} steps)`, '', 1800);
       } finally {
         currentRun = null;
         if (panel) panel.close();
@@ -156,7 +165,13 @@
   }
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-    if (!msg || msg.type !== 'fastblaze:run' || window !== window.top) return;
+    if (!msg || window !== window.top) return;
+    if (msg.type === 'fastblaze:pick') {
+      FB.picker.start();
+      sendResponse({ ok: true });
+      return;
+    }
+    if (msg.type !== 'fastblaze:run') return;
     const run = (list) => {
       const snip = list.find((s) => s.id === msg.id);
       if (!snip) return sendResponse({ ok: false, error: 'Snippet not found' });

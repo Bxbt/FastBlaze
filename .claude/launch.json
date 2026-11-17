@@ -4,7 +4,7 @@
     {
       "name": "test-page",
       "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "http.server", "8765"],
+      "runtimeArgs": ["test-page/serve.py", "8765"],
       "port": 8765
     }
   ]

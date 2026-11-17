@@ -1,0 +1,14 @@
+<!doctype html>
+<meta charset="utf-8">
+<!-- Opens the real Options page with the chrome.* mock, for testing outside the extension. -->
+<script>
+  (async () => {
+    const mock = await (await fetch('chrome-mock.js')).text();
+    let html = await (await fetch('../src/options/options.html')).text();
+    html = html.replaceAll('<script src=', '<script charset="utf-8" src=');
+    html = html.replace('<head>', `<head><base href="../src/options/"><script>${mock}<\/script>`);
+    document.open();
+    document.write(html);
+    document.close();
+  })();
+</script>

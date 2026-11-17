@@ -75,10 +75,12 @@
         ctx.depth--;
       }
     },
+    // {click: selector=CSS} or {click: text=Label} (optionally both: text inside selector scope)
     click(a, ctx, emit) {
-      const selector = a.selector ?? a._[0];
-      if (!selector) throw new Error('click needs selector=');
-      if (emit) ctx.actions.push({ type: 'click', selector });
+      const selector = a.selector ?? a._[0] ?? null;
+      const text = a.text ?? null;
+      if (!selector && !text) throw new Error('click needs selector= or text=');
+      if (emit) ctx.actions.push(text != null ? { type: 'click', selector, text } : { type: 'click', selector });
       return '';
     },
     wait(a, ctx, emit) {
@@ -114,7 +116,7 @@
   function describeAction(a) {
     switch (a.type) {
       case 'text': return `type "${a.value.length > 40 ? `${a.value.slice(0, 40)}…` : a.value}"`;
-      case 'click': return `click ${a.selector}`;
+      case 'click': return a.text != null ? `click "${a.text}"${a.selector ? ` in ${a.selector}` : ''}` : `click ${a.selector}`;
       case 'wait': return `wait ${a.ms} ms`;
       case 'key': return `key ${a.key}`;
       case 'clear': return `clear ${a.selector || 'focused field'}`;

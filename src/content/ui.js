@@ -140,7 +140,7 @@
     const stop = el('button', { type: 'button', className: 'p-stop', textContent: 'Stop (Esc)' });
     stop.addEventListener('click', onStop);
     root.appendChild(el('div', { className: 'progress' }, [
-      el('div', { className: 'p-head' }, [el('strong', { textContent: `⚡ ${title}` }), count, stop]),
+      el('div', { className: 'p-head' }, [el('strong', { textContent: title }), count, stop]),
       el('div', { className: 'p-bar' }, [fill]),
       label,
     ]));
@@ -154,5 +154,5 @@
     };
   }
 
-  FB.ui = { showForm, toast, flash, progress };
+  FB.ui = { showForm, toast, flash, progress, mount, el, STYLE };
 })();

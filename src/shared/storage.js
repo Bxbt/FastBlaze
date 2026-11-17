@@ -1,4 +1,4 @@
-// Snippet storage in chrome.storage.local + Text Blaze JSON import/export.
+// Snippet storage in chrome.storage.local + JSON import/export (v7 folders/snippets format).
 (function () {
   'use strict';
   const FB = (globalThis.FastBlaze = globalThis.FastBlaze || {});
@@ -13,6 +13,7 @@
       folders: folders.map((f) => ({
         id: f.id || uid(),
         name: String(f.name || 'Untitled'),
+        ...(f.disabled ? { disabled: true } : {}),
         snippets: (Array.isArray(f.snippets) ? f.snippets : []).map((s) => ({
           id: s.id || uid(),
           name: String(s.name ?? ''),
@@ -32,11 +33,14 @@
     await chrome.storage.local.set({ [KEY]: normalize(data) });
   }
 
-  function flatten(data) {
-    return normalize(data).folders.flatMap((f) => f.snippets.map((s) => ({ ...s, folderId: f.id, folder: f.name })));
+  /** All snippets with their folder info. Disabled folders are skipped unless includeDisabled. */
+  function flatten(data, includeDisabled) {
+    return normalize(data).folders
+      .filter((f) => includeDisabled || !f.disabled)
+      .flatMap((f) => f.snippets.map((s) => ({ ...s, folderId: f.id, folder: f.name })));
   }
 
-  /** Merge an imported file (Text Blaze export or FastBlaze export). Same folder name + same shortcut = replace. */
+  /** Merge an imported file (v7 JSON export). Same folder name + same shortcut = replace. */
   function mergeImport(current, imported) {
     const data = normalize(current);
     const incoming = normalize(imported);
@@ -60,14 +64,15 @@
 
   const escapeHtml = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-  /** Export in Text Blaze v7 shape so the file still imports into Text Blaze. */
-  function toTextBlaze(data) {
+  /** Export as v7 JSON (folders → snippets with text + html), same shape as the import format. */
+  function toExportJson(data) {
     return {
       version: 7,
       folders: normalize(data).folders.map((f) => ({
         name: f.name,
         info: '',
         app: 'TEXT',
+        ...(f.disabled ? { disabled: true } : {}),
         snippets: f.snippets.map((s) => ({
           name: s.name, shortcut: s.shortcut, type: 'text', text: s.text, html: escapeHtml(s.text),
         })),
@@ -88,6 +93,7 @@
       highlight: s.highlight ?? d.highlight,
       stepDelay: num(s.stepDelay, d.stepDelay, 0, 5000),
       timeout: num(s.timeout, d.timeout, 500, 60000),
+      soundVolume: num(s.soundVolume, d.soundVolume, 0, 100),
     };
   }
 
@@ -101,7 +107,7 @@
   }
 
   FB.storage = {
-    KEY, SETTINGS_KEY, uid, normalize, load, save, flatten, mergeImport, toTextBlaze,
+    KEY, SETTINGS_KEY, uid, normalize, load, save, flatten, mergeImport, toExportJson,
     normalizeSettings, loadSettings, saveSettings,
   };
 })();

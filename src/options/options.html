@@ -1,44 +1,72 @@
 <!doctype html>
-<html lang="th">
+<html lang="th" data-fastblaze-scope="[data-tryout]">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>FastBlaze Snippets</title>
   <link rel="stylesheet" href="../shared/base.css">
   <link rel="stylesheet" href="options.css">
+  <script src="../shared/theme.js"></script>
 </head>
 <body>
   <header class="top">
-    <img src="../../icons/icon-48.png" alt="" width="28" height="28">
-    <strong class="brand">FastBlaze</strong>
+    <a href="#" id="home" class="home" title="Home">
+      <img src="../../icons/icon-48.png" alt="" width="32" height="32">
+      <strong class="brand brand-text">FastBlaze</strong>
+    </a>
     <div class="spacer"></div>
-    <button id="new-folder">+ Folder</button>
-    <button id="new-snippet" class="primary">+ Snippet</button>
-    <button id="import">Import JSON</button>
-    <button id="export">Export JSON</button>
-    <button id="open-settings" title="Settings">⚙ Settings</button>
-    <input id="import-file" type="file" accept=".json,application/json" hidden>
+    <button id="open-settings" class="ghost" title="Settings" data-icon="sliders">Settings</button>
+    <div class="appearance"></div>
   </header>
 
   <dialog id="settings">
     <form method="dialog" class="settings-form">
       <h3>Settings</h3>
+      <h4>Automation</h4>
       <label class="check"><input type="checkbox" id="s-highlight"> Highlight clicked elements (yellow)</label>
       <label>Pause after each click / key (ms)<input type="number" id="s-step" min="0" max="5000" step="10"></label>
       <label>Wait for element up to (seconds)<input type="number" id="s-timeout" min="0.5" max="60" step="0.5"></label>
       <p class="muted">Saved automatically. Applies to new runs on all tabs.</p>
+      <h4>Sound</h4>
+      <label>Key-click volume <span id="s-volume-value" class="muted"></span>
+        <div class="row volume-row">
+          <input type="range" id="s-volume" min="0" max="100" step="5">
+          <button type="button" id="s-volume-test">Test</button>
+        </div>
+      </label>
+      <p class="muted">Short keyboard clicks when a snippet starts, and a soft tick on each automation click. 0 = off.</p>
+      <h4>Data</h4>
+      <p class="muted">Import merges into existing folders (same folder + shortcut is replaced). Export saves every folder as JSON.</p>
+      <div class="row data-actions">
+        <button type="button" id="import" data-icon="upload">Import JSON</button>
+        <button type="button" id="export" data-icon="download">Export JSON</button>
+        <input id="import-file" type="file" accept=".json,application/json" hidden>
+      </div>
       <div class="row"><div class="spacer"></div><button class="primary" value="close">Done</button></div>
     </form>
   </dialog>
 
   <div class="layout">
     <aside>
+      <div class="side-actions">
+        <button id="new-snippet" class="primary" data-icon="plus">Snippet</button>
+        <button id="new-folder" data-icon="folder">Folder</button>
+      </div>
       <input id="search" type="search" placeholder="Search…">
       <div id="tree"></div>
     </aside>
 
     <main>
-      <div id="empty" class="muted">Select or create a snippet.</div>
+      <section id="empty" class="welcome">
+        <h1>Welcome to <span class="brand-text">FastBlaze</span></h1>
+        <p>ลองพิมพ์ shortcut ในช่องด้านล่าง <span id="welcome-examples"></span></p>
+        <textarea id="tryout" data-tryout rows="6" aria-label="Try out shortcuts"></textarea>
+        <p class="muted">Shortcut ใช้ได้ทุกเว็บ · คลิกขวาที่โฟลเดอร์หรือ snippet เพื่อดูเมนู · ลาก snippet เพื่อสลับตำแหน่ง · กด Pick ใน popup (Alt+Shift+P) เพื่อเก็บ selector จากหน้าเว็บ</p>
+        <div class="row">
+          <span>สร้าง snippet ใหม่</span>
+          <button type="button" id="welcome-new" class="primary" data-icon="plus">New snippet</button>
+        </div>
+      </section>
 
       <form id="editor" hidden>
         <div class="row">
@@ -53,8 +81,9 @@
         <div class="row actions">
           <span id="saved" class="muted"></span>
           <div class="spacer"></div>
-          <button type="button" id="duplicate">Duplicate</button>
-          <button type="button" id="delete" class="danger">Delete</button>
+          <button type="button" id="insert-pick" disabled title="Use Pick in the popup (Alt+Shift+P) on a page first" data-icon="crosshair">Insert picked</button>
+          <button type="button" id="duplicate" data-icon="copy">Duplicate</button>
+          <button type="button" id="delete" class="danger" data-icon="trash">Delete</button>
         </div>
 
         <section class="preview">
@@ -62,10 +91,13 @@
             <strong>Preview</strong>
             <span class="muted">(form fields use defaults)</span>
             <div class="spacer"></div>
-            <button type="button" id="refresh-preview">↻ Re-run</button>
+            <button type="button" id="refresh-preview" data-icon="refresh">Re-run</button>
           </div>
           <ol id="preview-list"></ol>
           <pre id="preview-errors" class="warn" hidden></pre>
+          <label class="tryout-label">Try it out
+            <textarea data-tryout rows="2"></textarea>
+          </label>
         </section>
       </form>
 
@@ -79,6 +111,7 @@
           <tr><td><code>{formtext: name=first; default=ทดสอบ}</code></td><td>Ask before inserting. Also <code>{formmenu: default=A; B; C; name=x}</code>, <code>{formparagraph}</code></td></tr>
           <tr><td><code>{import: /id}</code></td><td>Insert another snippet</td></tr>
           <tr><td><code>{click: selector=[data-testid="x"]}</code></td><td>Wait (up to 5s) for a visible element, click it; text after it types into the focused field</td></tr>
+          <tr><td><code>{click: text=บางรัก}</code></td><td>Click the element whose visible text is exactly this (add <code>selector=</code> to search inside it). Good for dropdown options</td></tr>
           <tr><td><code>{clear}</code> <code>{clear: selector=…}</code></td><td>Empty the focused field (or the matched field) before typing</td></tr>
           <tr><td><code>{select: selector=…; value=10}</code></td><td>Pick an option in a native &lt;select&gt; by <code>value=</code>, <code>text=</code> or <code>index=</code></td></tr>
           <tr><td><code>{wait: 500ms}</code> <code>{key: enter}</code></td><td>Pause; press enter / tab / escape / up / down / space / backspace</td></tr>
@@ -94,6 +127,13 @@
   <script src="../engine/runner.js"></script>
   <script src="../shared/defaults.js"></script>
   <script src="../shared/storage.js"></script>
+  <script src="../shared/icons.js"></script>
+  <!-- Content scripts power the try-out boxes (scoped to [data-tryout]). -->
+  <script src="../content/dom.js"></script>
+  <script src="../content/ui.js"></script>
+  <script src="../content/sound.js"></script>
+  <script src="../content/content.js"></script>
+  <script src="dialog.js"></script>
   <script src="options.js"></script>
 </body>
 </html>
