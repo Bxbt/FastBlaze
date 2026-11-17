@@ -562,7 +562,7 @@
       case 'random-number': parts = [P('random', `${a.min ?? 0}–${a.max ?? 100}`)]; break;
       case 'import': parts = [P('import', a.shortcut ?? a._[0])]; break;
       case 'thaiphone': parts = [['phone', a.source === 'random' ? 'random' : 'allow list'], P('type', a.type)]; break;
-      case 'thainame': parts = [['name', [a.part ?? a._[0], a.gender, a.lang === 'en' ? 'EN' : '', a.title === 'yes' ? 'title' : ''].filter(Boolean).join(' · ') || 'full']]; break;
+      case 'thainame': parts = [['name', [a.style === 'real' ? 'realistic' : a.style === 'edge' ? 'edge cases' : 'test', a.part ?? a._[0], a.gender, a.lang === 'en' ? 'EN' : '', a.title === 'yes' ? 'title' : ''].filter(Boolean).join(' · ')]]; break;
       case 'email': parts = [['email', a.domain ?? 'example.com']]; break;
       case 'date': parts = [['date', a.age ? `age ${a.age}` : a.shift ? a.shift : 'today'], P('format', a.format ?? a._[0])]; break;
       case 'zipcode': parts = [['zip code', a.province ?? a._[0] ?? '']]; break;
@@ -1228,15 +1228,22 @@
     },
     {
       id: 'thainame', group: 'Test data', frequent: true, icon: 'user', title: 'Thai name',
-      desc: 'Random first name, last name or full name', keywords: 'name person ชื่อ นามสกุล',
+      desc: 'Test-safe, realistic or edge-case names', keywords: 'name person ชื่อ นามสกุล mock pdpa',
       fields: [
+        { key: 'style', label: 'Kind of name', type: 'select', value: 'test',
+          options: [['test', 'Test-safe (ทดสอบ ระบบงาน) — never a real person'], ['real', 'Realistic (สมชาย ใจดี) — may match real people'], ['edge', 'Edge cases for QA (long, symbols, stacked vowels)']],
+          desc: (v) => (v.style === 'real'
+            ? 'Common real Thai names. They will match real people, so avoid them where data is shared or kept.'
+            : v.style === 'edge'
+              ? 'Very long names, stacked vowels and descenders, hyphen / underscore / digits, double spaces, apostrophes. Thai only.'
+              : 'Names made of test and tech words (e.g. นายดาต้าเบส เซิร์ฟเวอร์), easy to find and delete later.') },
         { key: 'part', label: 'Part', type: 'select', options: [['full', 'Full name'], ['first', 'First name'], ['last', 'Last name']], value: 'full' },
         { key: 'gender', label: 'Gender', type: 'select', options: [['any', 'Any'], ['male', 'Male'], ['female', 'Female']], value: 'any', show: (v) => v.part !== 'last' },
-        { key: 'lang', label: 'Language', type: 'select', options: [['th', 'Thai (สมชาย)'], ['en', 'English (Somchai)']], value: 'th' },
+        { key: 'lang', label: 'Language', type: 'select', options: [['th', 'Thai'], ['en', 'English']], value: 'th', show: (v) => v.style !== 'edge' },
         { key: 'title', label: 'Title', type: 'select', options: [['no', 'No title'], ['yes', 'With title (นาย / นางสาว)']], value: 'no', show: (v) => v.part !== 'last' },
       ],
       build: (v) => {
-        const args = [v.part !== 'full' ? `part=${v.part}` : '', v.part !== 'last' && v.gender !== 'any' ? `gender=${v.gender}` : '',
+        const args = [v.style && v.style !== 'test' ? `style=${v.style}` : '', v.part !== 'full' ? `part=${v.part}` : '', v.part !== 'last' && v.gender !== 'any' ? `gender=${v.gender}` : '',
           v.lang === 'en' ? 'lang=en' : '', v.part !== 'last' && v.title === 'yes' ? 'title=yes' : ''].filter(Boolean);
         return args.length ? `{thainame: ${args.join('; ')}}` : '{thainame}';
       },
@@ -1554,6 +1561,7 @@
       source: a.source === 'random' ? 'random' : 'list', prefix: a.prefix ?? '',
     }),
     thainame: (a) => ({
+      style: a.style === 'real' || a.style === 'edge' ? a.style : 'test',
       part: a.part ?? a._[0] ?? 'full', gender: a.gender ?? 'any', lang: a.lang === 'en' ? 'en' : 'th', title: isYesArg(a.title) ? 'yes' : 'no',
     }),
     email: (a) => ({ base: a.base ?? 'test', domain: a.domain ?? 'example.com' }),

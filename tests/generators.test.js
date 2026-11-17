@@ -118,3 +118,20 @@ test('zipcode: only real Thai postal codes; province / prefix filters', () => {
   assert.match(FB.compile('{zipcode: province=Atlantis}').errors[0], /Unknown province/);
   assert.match(FB.compile('{zipcode: prefix=99}').errors[0], /No real postal code/);
 });
+
+test('thainame: default style is test-safe, real and edge are opt-in', () => {
+  const realFirst = ['สมชาย', 'สมศักดิ์', 'ประเสริฐ', 'วิชัย', 'สุรชัย', 'สมหญิง', 'สุภาพร', 'ศิริพร'];
+  for (const n of many(() => run('{thainame}'), 300)) {
+    const [first] = n.split(' ');
+    assert.ok(!realFirst.includes(first), `default produced a real name: ${n}`);
+    assert.match(n, /^[฀-๿]+ [฀-๿]+$/, `only Thai letters expected: ${n}`);
+  }
+  assert.match(run('{thainame: lang=en}'), /^[A-Z][a-z]+ [A-Z][a-z]+$/);
+  const real = many(() => run('{thainame: style=real; part=first}'), 200);
+  assert.ok(real.some((n) => realFirst.includes(n)), 'style=real should use common real names');
+  const edge = many(() => run('{thainame: style=edge}'), 300);
+  assert.ok(edge.some((n) => n.length > 40), 'edge set includes very long names');
+  assert.ok(edge.some((n) => n.includes('  ')), 'edge set includes double spaces');
+  assert.ok(edge.some((n) => /['\-_.()]/.test(n)), 'edge set includes symbols');
+  assert.ok(edge.every((n) => !/OR\s*'1'\s*=\s*'1|<script/i.test(n)), 'no injection payloads');
+});

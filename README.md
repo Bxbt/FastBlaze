@@ -76,7 +76,7 @@ After editing code: click ↻ on the extension card, then reload the page.
 | `{thaiid}` / `{thaiid: prefix=8; format=dash}` | Valid Thai ID (test data) |
 | `{random-number: min=0; max=9}` | Random integer (`rounded=no` → decimal) |
 | `{thaiphone}` / `{thaiphone: type=landline; format=dash; prefix=064; source=random}` | From the Settings allow list; random Thai mobile / landline only when the list is empty or `source=random` |
-| `{thainame}` / `{thainame: part=first; gender=male; lang=en; title=yes}` | Thai (or romanized) first / last / full name, optional นาย / นางสาว |
+| `{thainame}` / `{thainame: style=real\|edge; part=first; gender=male; lang=en; title=yes}` | Default `style=test`: names made of test / tech words (นายทดสอบ ระบบงาน) that never belong to a real person (PDPA-safe). `real` = common real names, `edge` = QA cases (long, symbols, stacked vowels, double spaces) |
 | `{email}` / `{email: base=qa; domain=example.com}` | Unique test address (default `example.com`, never delivers) |
 | `{date}` / `{date: age=20-40; format=DDMMBBBB}` / `{date: shift=-3d}` | Today, shifted, or random birthday for an age range. Tokens: `BBBB`/`BB` พ.ศ., `YYYY`/`YY` ค.ศ., `MMMM`/`MMM` Thai month, `MM`, `DD` |
 | `{zipcode}` / `{zipcode: province=ขอนแก่น}` / `{zipcode: prefix=11}` | A **real** Thai postal code (964 codes from [kongvut/thai-province-data](https://github.com/kongvut/thai-province-data), MIT) |

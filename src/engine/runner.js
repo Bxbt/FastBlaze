@@ -57,7 +57,7 @@
       return FB.gen.phone({ type: a.type, prefix: a.prefix, format: a.format, source: a.source, allow: ctx.testData.phones });
     },
     thainame(a) {
-      return FB.gen.name({ part: a.part ?? a._[0], gender: a.gender, lang: a.lang, title: isYes(a.title, false) });
+      return FB.gen.name({ part: a.part ?? a._[0], gender: a.gender, lang: a.lang, title: isYes(a.title, false), style: a.style });
     },
     email(a) { return FB.gen.email({ base: a.base, domain: a.domain }); },
     date(a, ctx) {

@@ -50,15 +50,45 @@
     ['ทองดี', 'Thongdee'], ['แก้วมณี', 'Kaewmanee'], ['บุญมา', 'Boonma'], ['มีสุข', 'Meesuk'], ['พันธุ์ดี', 'Phandee'],
     ['เจริญผล', 'Charoenphon'], ['สมบูรณ์', 'Somboon'], ['ประเสริฐศรี', 'Prasertsri'], ['ศักดิ์สิทธิ์', 'Saksit'], ['รุ่งเรือง', 'Rungruang'],
   ];
+
+  // Test-safe names: words that say "test" or tech terms shaped like Thai names, so they
+  // never belong to a real person and are easy to find / delete. Gender-neutral.
+  const TEST_FIRST = [
+    ['ทดสอบ', 'Test'], ['เทสเตอร์', 'Tester'], ['จำลอง', 'Mock'], ['ตัวอย่าง', 'Sample'], ['บอท', 'Bot'],
+    ['ดีบัก', 'Debug'], ['สเตจจิ้ง', 'Staging'], ['แซนด์บ็อกซ์', 'Sandbox'], ['ดาต้าเบส', 'Database'], ['อัลกอริทึม', 'Algorithm'],
+    ['เอพีไอ', 'Api'], ['บั๊กฟรี', 'Bugfree'], ['ซอฟต์แวร์', 'Software'], ['คิวเอ', 'Qa'], ['เดโม', 'Demo'],
+  ];
+  const TEST_LAST = [
+    ['ระบบงาน', 'System'], ['ฐานข้อมูล', 'Records'], ['ข้อมูลดิบ', 'Rawdata'], ['ผู้ใช้งาน', 'User'], ['ทดลองระบบ', 'Trial'],
+    ['โค้ดดิ้ง', 'Coding'], ['เซิร์ฟเวอร์', 'Server'], ['ดีพลอยเมนต์', 'Deployment'], ['เกตเวย์', 'Gateway'], ['เอนจิเนียร์', 'Engineer'],
+    ['ยูนิตเทสต์', 'Unittest'], ['ไปป์ไลน์', 'Pipeline'], ['คอมไพเลอร์', 'Compiler'], ['แคชเมมโมรี', 'Cache'], ['ทดสอบระบบ', 'Testing'],
+  ];
+  // QA edge cases (Thai only): stacked vowels / descenders, very long, symbols, double space, apostrophe.
+  const EDGE_FIRST = ['ฤๅษีฏีกาญัติ', 'สระซ้อนทั้งหมดที่ยาวมากเพื่อทดสอบการตัดคำในกล่องข้อความ', 'ทดสอบ-ระบบ_01', 'ช่องว่าง  สองครั้ง', 'ดี\'แอนด์', 'ณ', 'ฎีกา(ทดสอบ)', 'กุ๊กกิ๊ก๋'];
+  const EDGE_LAST = ['ฐิติญาณ์ศุภฤกษ์', 'ยาวมากกกกกกกกกกกกกกกกกกกกกกกกกกกกกกกก', 'ณ อยุธยา', 'ทดสอบ.ระบบ', 'O\'Test', 'สกุล  วรรคคู่', 'ญาณ์ฏฐ์', 'ที'];
   const TITLES = { male: ['นาย', 'Mr.'], female: ['นางสาว', 'Ms.'] };
 
-  /** opts: part = first | last | full, gender = male | female | any, lang = th | en, title = yes */
+  /**
+   * opts: style = test (default, never a real person) | real (common real names) | edge (QA cases),
+   *       part = first | last | full, gender = male | female | any, lang = th | en, title = yes
+   */
   function name(opts) {
     opts = opts || {};
+    const style = opts.style === 'real' || opts.style === 'edge' ? opts.style : 'test';
     const gender = opts.gender === 'male' || opts.gender === 'female' ? opts.gender : pick(['male', 'female']);
-    const li = opts.lang === 'en' ? 1 : 0;
-    const first = pick(gender === 'male' ? MALE : FEMALE)[li];
-    const last = pick(LAST)[li];
+    const li = opts.lang === 'en' && style !== 'edge' ? 1 : 0;
+    let first;
+    let last;
+    if (style === 'real') {
+      first = pick(gender === 'male' ? MALE : FEMALE)[li];
+      last = pick(LAST)[li];
+    } else if (style === 'edge') {
+      first = pick(EDGE_FIRST);
+      last = pick(EDGE_LAST);
+    } else {
+      first = pick(TEST_FIRST)[li];
+      last = pick(TEST_LAST)[li];
+    }
     const part = opts.part || 'full';
     let out = part === 'first' ? first : part === 'last' ? last : `${first} ${last}`;
     if (opts.title && part !== 'last') out = li ? `${TITLES[gender][1]} ${out}` : `${TITLES[gender][0]}${out}`;
