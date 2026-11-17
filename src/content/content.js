@@ -1,8 +1,13 @@
 // Watches typing for snippet shortcuts and runs snippets requested by the popup.
 (function () {
   'use strict';
-  if (globalThis.__fastblazeLoaded) return;
-  globalThis.__fastblazeLoaded = true;
+  // Every load becomes the active instance. When the extension is reloaded, the old
+  // content script stays in open tabs but can no longer talk to the extension; the
+  // background then injects us again. A bumped generation switches the old copy off
+  // (an "already loaded" guard would instead block the new copy forever).
+  const GEN = (globalThis.__fastblazeGen || 0) + 1;
+  globalThis.__fastblazeGen = GEN;
+  const alive = () => globalThis.__fastblazeGen === GEN;
 
   const FB = globalThis.FastBlaze;
   let snippets = [];
@@ -21,14 +26,14 @@
   FB.storage.load().then(index);
   FB.storage.loadSettings().then((s) => { settings = s; });
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area !== 'local') return;
+    if (!alive() || area !== 'local') return;
     if (changes[FB.storage.KEY]) index(changes[FB.storage.KEY].newValue);
     if (changes[FB.storage.SETTINGS_KEY]) settings = FB.storage.normalizeSettings(changes[FB.storage.SETTINGS_KEY].newValue);
   });
 
   // Real Esc key stops a running flow (synthetic {key: escape} is ignored).
   window.addEventListener('keydown', (e) => {
-    if (currentRun && e.isTrusted && e.key === 'Escape') {
+    if (alive() && currentRun && e.isTrusted && e.key === 'Escape') {
       currentRun.cancelled = true;
       e.preventDefault();
       e.stopPropagation();
@@ -58,7 +63,7 @@
   const inScope = (el) => !SCOPE || !!el.closest(SCOPE);
 
   window.addEventListener('keydown', (e) => {
-    if (busy || !e.isTrusted || e.isComposing) return;
+    if (!alive() || busy || !e.isTrusted || e.isComposing) return;
     const el = FB.dom.deepActiveElement();
     if (!FB.dom.isEditable(el) || !inScope(el)) return resetTyped();
     if (el !== typedEl) { typed = []; typedEl = el; }
@@ -84,7 +89,7 @@
   }
 
   function checkShortcut(el) {
-    if (busy || el !== typedEl || el !== FB.dom.deepActiveElement()) return;
+    if (!alive() || busy || el !== typedEl || el !== FB.dom.deepActiveElement()) return;
     const text = typed.map((t) => t.ch).join('');
     const sc = shortcuts.find((s) => text.endsWith(s));
     if (!sc) return;
@@ -102,7 +107,7 @@
 
   // Fallback for text that arrives without key events (autofill, IME, voice, automation tools).
   document.addEventListener('input', (e) => {
-    if (busy || e.isComposing) return;
+    if (!alive() || busy || e.isComposing) return;
     if (e.inputType && !e.inputType.startsWith('insert')) return;
     const el = FB.dom.deepActiveElement();
     if (!FB.dom.isEditable(el) || !inScope(el)) return;
@@ -165,7 +170,7 @@
   }
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-    if (!msg || window !== window.top) return;
+    if (!msg || !alive() || window !== window.top) return;
     if (msg.type === 'fastblaze:pick-stop') {
       FB.picker.stop();
       sendResponse({ ok: true });

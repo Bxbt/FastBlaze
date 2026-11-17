@@ -55,8 +55,9 @@ async function followTo(tabId, force) {
   await setPickState({ ...s, currentTabId: tabId });
   try {
     await sendToTop(tabId, { type: 'fastblaze:pick', returnTo: true });
-  } catch {
+  } catch (err) {
     // chrome:// pages, the Web Store, etc. cannot be scripted: wait for another tab.
+    console.warn('[FastBlaze] picker could not start in tab', tabId, err && err.message);
     const now = await getPickState();
     if (now && now.currentTabId === tabId) await setPickState({ ...now, currentTabId: null });
   }
