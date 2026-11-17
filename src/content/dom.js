@@ -304,7 +304,7 @@
             typeText(a.value, automation);
             break;
           case 'click':
-            el = await waitForElement(a.selector, timeout, run, a.text);
+            el = await waitForElement(a.selector, a.timeout ?? timeout, run, a.text);
             mark(el);
             simulateClick(el);
             await pause(stepDelay, run);

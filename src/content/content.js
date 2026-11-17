@@ -166,8 +166,13 @@
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (!msg || window !== window.top) return;
+    if (msg.type === 'fastblaze:pick-stop') {
+      FB.picker.stop();
+      sendResponse({ ok: true });
+      return;
+    }
     if (msg.type === 'fastblaze:pick') {
-      FB.picker.start();
+      FB.picker.start({ returnTo: !!msg.returnTo });
       sendResponse({ ok: true });
       return;
     }

@@ -46,6 +46,28 @@
     </form>
   </dialog>
 
+  <dialog id="help" class="fb-dialog help-dialog">
+    <form method="dialog">
+      <h3>Template syntax</h3>
+        <table>
+          <tr><td><code>{thaiid}</code></td><td>Random valid Thai ID. Options: <code>prefix=8</code>, <code>format=dash</code></td></tr>
+          <tr><td><code>{random-number: min=0; max=9}</code></td><td>Random integer (<code>rounded=no</code> for decimals)</td></tr>
+          <tr><td><code>{x=5}</code> <code>{y={random-number: min=1; max=9}}</code></td><td>Set a variable</td></tr>
+          <tr><td><code>{=x*2 + floor(y/3)}</code></td><td>Insert expression. <code>&amp;</code> joins text, functions: floor ceil round abs min max mod len upper lower</td></tr>
+          <tr><td><code>{formtext: name=first; default=ทดสอบ}</code></td><td>Ask before inserting. Also <code>{formmenu: default=A; B; C; name=x}</code>, <code>{formparagraph}</code></td></tr>
+          <tr><td><code>{import: /id}</code></td><td>Insert another snippet</td></tr>
+          <tr><td><code>{click: selector=[data-testid="x"]}</code></td><td>Wait (up to 5s) for a visible element, click it; text after it types into the focused field</td></tr>
+          <tr><td><code>{click: text=บางรัก}</code></td><td>Click the element whose visible text is exactly this (add <code>selector=</code> to search inside it). Good for dropdown options</td></tr>
+          <tr><td><code>{clear}</code> <code>{clear: selector=…}</code></td><td>Empty the focused field (or the matched field) before typing</td></tr>
+          <tr><td><code>{select: selector=…; value=10}</code></td><td>Pick an option in a native &lt;select&gt; by <code>value=</code>, <code>text=</code> or <code>index=</code></td></tr>
+          <tr><td><code>{wait: 500ms}</code> <code>{key: enter}</code></td><td>Pause; press enter / tab / escape / up / down / space / backspace</td></tr>
+          <tr><td><code>\{</code> <code>\\</code></td><td>Literal brace / backslash</td></tr>
+          <tr><td><code>\</code> at end of line</td><td>Line continuation: the line break (and next line's indent) is ignored. <b>Format</b> uses it to show one command per line</td></tr>
+        </table>
+      <div class="fb-dialog-actions"><button class="primary" value="close">Close</button></div>
+    </form>
+  </dialog>
+
   <div class="layout">
     <aside>
       <div class="side-actions">
@@ -103,10 +125,12 @@
                 <span class="spacer"></span>
                 <span id="saved" class="muted"></span>
               </div>
-              <div id="edit-pane" class="code-wrap">
-                <pre id="code-hl" class="code-hl" aria-hidden="true"></pre>
-                <textarea id="f-text" class="code-input" spellcheck="false" placeholder="Text that will be inserted when the shortcut is typed…"></textarea>
-                <div id="ac" class="ac" role="listbox" hidden></div>
+              <div id="edit-pane" class="code-scroll">
+                <div id="code-wrap" class="code-wrap">
+                  <pre id="code-hl" class="code-hl" aria-hidden="true"></pre>
+                  <textarea id="f-text" class="code-input" spellcheck="false" placeholder="Text that will be inserted when the shortcut is typed…"></textarea>
+                  <div id="ac" class="ac" role="listbox" hidden></div>
+                </div>
               </div>
               <div id="preview-pane" class="preview-pane" hidden>
                 <div class="row">
@@ -126,8 +150,10 @@
             <div class="cmd-search">
               <span data-icon="search"></span>
               <input id="cmd-q" type="search" placeholder="Dynamic commands" aria-label="Search dynamic commands">
+              <button type="button" id="open-help" class="icon-only ghost-btn" title="Template syntax" data-icon="help"></button>
             </div>
             <div id="cmd-list" class="cmd-list"></div>
+            <div id="cmd-config" class="cmd-config" hidden></div>
             <div class="cmd-footer">
               <button type="button" id="duplicate" class="icon-only ghost-btn" title="Duplicate snippet" data-icon="copy"></button>
               <span class="spacer"></span>
@@ -137,24 +163,6 @@
         </div>
       </form>
 
-      <details class="help">
-        <summary>Template syntax</summary>
-        <table>
-          <tr><td><code>{thaiid}</code></td><td>Random valid Thai ID. Options: <code>prefix=8</code>, <code>format=dash</code></td></tr>
-          <tr><td><code>{random-number: min=0; max=9}</code></td><td>Random integer (<code>rounded=no</code> for decimals)</td></tr>
-          <tr><td><code>{x=5}</code> <code>{y={random-number: min=1; max=9}}</code></td><td>Set a variable</td></tr>
-          <tr><td><code>{=x*2 + floor(y/3)}</code></td><td>Insert expression. <code>&amp;</code> joins text, functions: floor ceil round abs min max mod len upper lower</td></tr>
-          <tr><td><code>{formtext: name=first; default=ทดสอบ}</code></td><td>Ask before inserting. Also <code>{formmenu: default=A; B; C; name=x}</code>, <code>{formparagraph}</code></td></tr>
-          <tr><td><code>{import: /id}</code></td><td>Insert another snippet</td></tr>
-          <tr><td><code>{click: selector=[data-testid="x"]}</code></td><td>Wait (up to 5s) for a visible element, click it; text after it types into the focused field</td></tr>
-          <tr><td><code>{click: text=บางรัก}</code></td><td>Click the element whose visible text is exactly this (add <code>selector=</code> to search inside it). Good for dropdown options</td></tr>
-          <tr><td><code>{clear}</code> <code>{clear: selector=…}</code></td><td>Empty the focused field (or the matched field) before typing</td></tr>
-          <tr><td><code>{select: selector=…; value=10}</code></td><td>Pick an option in a native &lt;select&gt; by <code>value=</code>, <code>text=</code> or <code>index=</code></td></tr>
-          <tr><td><code>{wait: 500ms}</code> <code>{key: enter}</code></td><td>Pause; press enter / tab / escape / up / down / space / backspace</td></tr>
-          <tr><td><code>\{</code> <code>\\</code></td><td>Literal brace / backslash</td></tr>
-          <tr><td><code>\</code> at end of line</td><td>Line continuation: the line break (and next line's indent) is ignored. <b>Format</b> uses it to show one command per line</td></tr>
-        </table>
-      </details>
     </main>
   </div>
 
@@ -165,6 +173,7 @@
   <script src="../shared/defaults.js"></script>
   <script src="../shared/storage.js"></script>
   <script src="../shared/icons.js"></script>
+  <script src="../shared/select.js"></script>
   <!-- Content scripts power the try-out boxes (scoped to [data-tryout]). -->
   <script src="../content/dom.js"></script>
   <script src="../content/ui.js"></script>

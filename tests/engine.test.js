@@ -205,3 +205,10 @@ test('actions remember their source range', () => {
   const r = FB.compile(src, { lookup: () => 'T{=1+1}' });
   assert.deepEqual(r.actions.map((a) => src.slice(a.src.start, a.src.end)), ['ab', '{click: selector=#x}', '{import: /t}']);
 });
+
+test('click maxdelay sets a per-step timeout', () => {
+  const r = FB.compile('{click: selector=#a; maxdelay=3s}{click: text=OK; maxdelay=750ms}{click: selector=#b}');
+  assert.deepEqual(r.errors, []);
+  assert.deepEqual(r.actions.map((a) => a.timeout), [3000, 750, undefined]);
+  assert.match(FB.compile('{click: selector=#a; maxdelay=soon}').errors[0], /Bad delay/);
+});

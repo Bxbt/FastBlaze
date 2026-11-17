@@ -76,11 +76,14 @@
       }
     },
     // {click: selector=CSS} or {click: text=Label} (optionally both: text inside selector scope)
+    // maxdelay=5s overrides how long to wait for the element (default: Settings).
     click(a, ctx, emit) {
       const selector = a.selector ?? a._[0] ?? null;
       const text = a.text ?? null;
       if (!selector && !text) throw new Error('click needs selector= or text=');
-      if (emit) ctx.actions.push(text != null ? { type: 'click', selector, text } : { type: 'click', selector });
+      const action = text != null ? { type: 'click', selector, text } : { type: 'click', selector };
+      if (a.maxdelay != null && a.maxdelay !== '') action.timeout = parseDelay(a.maxdelay);
+      if (emit) ctx.actions.push(action);
       return '';
     },
     wait(a, ctx, emit) {

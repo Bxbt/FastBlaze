@@ -278,6 +278,7 @@
     if (hit && hit.f.disabled) setCollapsed(DISABLED_OPEN, true);
     $('editor').hidden = !hit;
     $('empty').hidden = !!hit;
+    document.querySelector('main').classList.toggle('editing', !!hit);
     if (!hit) renderWelcome();
     if (hit) {
       $('f-name').value = hit.s.name;
@@ -517,7 +518,7 @@
   function autoGrow() {
     if ($('edit-pane').hidden) return;
     ta.style.height = 'auto';
-    ta.style.height = `${Math.max(360, ta.scrollHeight)}px`;
+    ta.style.height = `${Math.max($('edit-pane').clientHeight, ta.scrollHeight)}px`;
   }
 
   let previewDebounce = null;
@@ -604,8 +605,10 @@
     setMode('edit');
     ta.focus();
     ta.setSelectionRange(src.start, src.end);
+    const pane = $('edit-pane');
     const r = charRect(src.start);
-    if (r.top < 90 || r.bottom > innerHeight - 40) window.scrollBy({ top: r.top - innerHeight / 3, behavior: 'smooth' });
+    const pr = pane.getBoundingClientRect();
+    if (r.top < pr.top || r.bottom > pr.bottom) pane.scrollBy({ top: r.top - pr.top - pane.clientHeight / 3, behavior: 'smooth' });
   }
 
   // ---------- import autocomplete ----------
@@ -641,7 +644,7 @@
       item.addEventListener('mousedown', (e) => { e.preventDefault(); acceptAc(i); });
       return item;
     }));
-    const wrap = $('edit-pane').getBoundingClientRect();
+    const wrap = $('code-wrap').getBoundingClientRect();
     const r = charRect(Math.max(0, ta.selectionStart - 1));
     box.style.left = `${Math.min(r.left - wrap.left, wrap.width - 260)}px`;
     box.style.top = `${r.bottom - wrap.top + 6}px`;
@@ -704,16 +707,25 @@
   const COMMANDS = [
     {
       id: 'click', group: 'Automation', frequent: true, icon: 'mouse', title: 'Click element',
-      desc: 'Click an element on the page, then type into it', keywords: 'button selector testid tap',
+      desc: 'Click an element on the page, then type into it', keywords: 'button selector testid tap pick',
       fields: [
-        { key: 'by', label: 'Find the element by', type: 'select', options: [['selector', 'CSS selector'], ['text', 'Visible text']], value: 'selector' },
-        { key: 'value', label: (v) => (v.by === 'text' ? 'Text shown on the element' : 'CSS selector'), required: true, mono: true,
-          hint: (v) => (v.by === 'text' ? 'Exact text, e.g. an option in a dropdown.' : 'Tip: Pick in the popup copies a reliable selector.') },
-        { key: 'within', label: 'Only inside (CSS selector, optional)', mono: true, show: (v) => v.by === 'text' },
+        { key: 'value', type: 'element', label: 'Element', required: true,
+          desc: 'The element to click. Select it on a web page, or type a CSS selector.' },
+        { key: 'maxdelay', label: 'Max delay', short: 'Time', type: 'number', row: 'md',
+          desc: () => `The element is clicked as soon as it becomes clickable. If it does not appear within this time, the snippet stops and shows an error. Leave empty to use Settings (${Math.round(currentSettings.timeout / 100) / 10}s).` },
+        { key: 'unit', label: 'Unit', type: 'select', options: [['s', 'Seconds'], ['ms', 'Milliseconds']], value: 's', row: 'md' },
+        { key: 'by', label: 'Find the element by', type: 'select', advanced: true,
+          options: [['selector', 'CSS selector'], ['text', 'Visible text']], value: 'selector',
+          desc: 'Visible text works well for dropdown options that have no test id.' },
+        { key: 'within', label: 'Only inside (CSS selector)', mono: true, advanced: true, show: (v) => v.by === 'text',
+          desc: 'Optional. Limits the text search to this part of the page.' },
       ],
-      build: (v) => (v.by === 'text'
-        ? `{click: text=${tplArg(v.value)}${v.within ? `; selector=${tplArg(v.within)}` : ''}}`
-        : `{click: selector=${tplArg(v.value)}}`),
+      build: (v) => {
+        const delay = v.maxdelay !== '' && v.maxdelay != null ? `; maxdelay=${Number(v.maxdelay)}${v.unit}` : '';
+        return v.by === 'text'
+          ? `{click: text=${tplArg(v.value)}${v.within ? `; selector=${tplArg(v.within)}` : ''}${delay}}`
+          : `{click: selector=${tplArg(v.value)}${delay}}`;
+      },
     },
     {
       id: 'select', group: 'Automation', icon: 'list', title: 'Choose option',
@@ -745,7 +757,7 @@
       id: 'wait', group: 'Automation', icon: 'clock', title: 'Wait',
       desc: 'Pause before the next step', keywords: 'delay sleep pause',
       fields: [
-        { key: 'amount', label: 'Duration', type: 'number', required: true, value: '500', row: 'dur' },
+        { key: 'amount', label: 'Duration', short: 'Amount', type: 'number', required: true, value: '500', row: 'dur', desc: 'Pause before running the next step.' },
         { key: 'unit', label: 'Unit', type: 'select', options: [['ms', 'Milliseconds'], ['s', 'Seconds']], value: 'ms', row: 'dur' },
       ],
       build: (v) => `{wait: ${Number(v.amount)}${v.unit}}`,
@@ -798,7 +810,7 @@
       id: 'random', group: 'Data', icon: 'dice', title: 'Random number',
       desc: 'A random number in a range', keywords: 'random number digit',
       fields: [
-        { key: 'min', label: 'Min', type: 'number', required: true, value: '0', row: 'range' },
+        { key: 'min', label: 'Range', short: 'Min', type: 'number', required: true, value: '0', row: 'range' },
         { key: 'max', label: 'Max', type: 'number', required: true, value: '9', row: 'range' },
         { key: 'kind', label: 'Type', type: 'select', options: [['whole', 'Whole number'], ['decimal', 'Decimal']], value: 'whole' },
       ],
@@ -851,53 +863,187 @@
     $('cmd-list').replaceChildren(...nodes);
   }
   $('cmd-q').addEventListener('input', renderCommands);
+  $('open-help').addEventListener('click', () => $('help').showModal());
 
-  // Config dialog for one command: fields (inputs + dropdowns) and a live preview.
+  // ---------- command config panel (right side) ----------
+  let currentSettings = FB.storage.normalizeSettings();
+  FB.storage.loadSettings().then((s) => { currentSettings = s; });
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes[FB.storage.SETTINGS_KEY]) currentSettings = FB.storage.normalizeSettings(changes[FB.storage.SETTINGS_KEY].newValue);
+  });
+
+  let pickWaiter = null; // { done(candidate), me: tab }
+
+  function showList() {
+    if (pickWaiter) cancelPick();
+    $('cmd-config').hidden = true;
+    $('cmd-config').replaceChildren();
+    for (const n of document.querySelectorAll('.commands > .cmd-search, .commands > .cmd-list, .commands > .cmd-footer')) n.hidden = false;
+  }
+
+  /**
+   * Start "Select from website": the background switches to the last used tab and
+   * runs the picker there; the picker follows any tab the user switches to.
+   * The result arrives through storage (lastPick).
+   */
+  async function pickFromWebsite(done, onWaiting) {
+    if (!chrome.tabs || !chrome.tabs.getCurrent) {
+      // Test harness without tab APIs: just wait for a pick to arrive in storage.
+      pickWaiter = { done, since: Date.now() };
+      onWaiting();
+      return;
+    }
+    const me = await chrome.tabs.getCurrent();
+    pickWaiter = { done, since: Date.now() };
+    onWaiting();
+    const res = await chrome.runtime.sendMessage({ type: 'fastblaze:pick-start', fromTabId: me && me.id }).catch((err) => ({ ok: false, error: err.message }));
+    if (!res || !res.ok) {
+      pickWaiter = null;
+      done(null);
+      await FB.dialog.alert({ title: 'Cannot start picking', message: [(res && res.error) || 'Unknown error', '. Open the web page in another tab, then try again.'] });
+    }
+  }
+
+  function cancelPick() {
+    pickWaiter = null;
+    if (chrome.runtime && chrome.runtime.sendMessage) chrome.runtime.sendMessage({ type: 'fastblaze:pick-cancel' }).catch(() => {});
+  }
+
+  chrome.storage.onChanged.addListener(async (changes, area) => {
+    if (area !== 'local' || !changes[LAST_PICK_KEY] || !pickWaiter) return;
+    const p = changes[LAST_PICK_KEY].newValue;
+    if (!p || p.at < pickWaiter.since) return;
+    const { done } = pickWaiter;
+    pickWaiter = null; // the background brings this tab back to the front
+    done((p.candidates && p.candidates[0]) || null);
+  });
+
+  // Config view for one command: sections with title + description + control.
   function openCommand(c) {
-    const dlg = el('dialog', { className: 'fb-dialog cmd-dialog' });
-    const form = el('form', { method: 'dialog' });
-    const vals = {};
-    const inputs = {};
-    const val = (x, v) => (typeof x === 'function' ? x(v) : x);
+    const panel = $('cmd-config');
+    for (const n of document.querySelectorAll('.commands > .cmd-search, .commands > .cmd-list, .commands > .cmd-footer')) n.hidden = true;
+    panel.hidden = false;
 
+    const val = (x, v) => (typeof x === 'function' ? x(v) : x);
+    const vals = {};
     for (const f of c.fields) {
       const opts = val(f.options, vals);
       vals[f.key] = f.value ?? (opts && opts[0] ? opts[0][0] : '');
     }
+    let showAdvanced = false;
+    let manualEdit = false;
+    let waiting = false;
+    const inputs = {};
 
+    const back = el('button', { type: 'button', className: 'icon-only ghost-btn', title: 'Back to commands' }, [FB.icon('back')]);
+    back.addEventListener('click', showList);
+    const head = el('div', { className: 'cfg-head' }, [back, FB.icon(c.icon), el('strong', { textContent: c.title })]);
+    const body = el('div', { className: 'cfg-body' });
     const out = el('code', { className: 'cmd-out' });
-    const fieldWrap = el('div');
     const err = el('p', { className: 'warn', hidden: true });
+    const cancel = el('button', { type: 'button', className: 'outline', textContent: 'Cancel' });
+    const ok = el('button', { type: 'button', className: 'primary' }, [FB.icon('plus'), 'Insert']);
+    cancel.addEventListener('click', showList);
+    const foot = el('div', { className: 'cfg-foot' }, [el('div', { className: 'cfg-out-label muted', textContent: 'Will insert' }), out, err,
+      el('div', { className: 'fb-dialog-actions' }, [cancel, ok])]);
+    panel.replaceChildren(head, body, foot);
 
-    function renderFields() {
-      const rows = new Map();
-      const nodes = [];
+    function control(f) {
+      const opts = val(f.options, vals);
+      let input;
+      if (f.type === 'select') {
+        input = el('select', {}, (opts || []).map(([v, label]) => el('option', { value: v, textContent: label })));
+        if (!opts || !opts.length) input.append(el('option', { value: '', textContent: '(nothing to choose)' }));
+        input.value = vals[f.key];
+        if (input.value !== vals[f.key]) vals[f.key] = input.value;
+        input.addEventListener('change', () => { vals[f.key] = input.value; render(); });
+      } else {
+        input = el('input', { type: val(f.type, vals) || 'text', value: vals[f.key] ?? '', className: f.mono ? 'mono' : '', spellcheck: false });
+        input.addEventListener('input', () => { vals[f.key] = input.value; updateOut(); });
+      }
+      inputs[f.key] = input;
+      return input;
+    }
+
+    function elementSection(f) {
+      const isText = vals.by === 'text';
+      const pickBtn = el('button', { type: 'button', className: 'pick-btn' }, [FB.icon('mouse'), waiting ? 'Waiting for your click…' : 'Select from website']);
+      pickBtn.disabled = waiting;
+      pickBtn.addEventListener('click', () => {
+        pickFromWebsite((cand) => {
+          waiting = false;
+          if (cand) {
+            if (cand.text != null && !cand.selector) { vals.by = 'text'; vals.value = cand.text; }
+            else { vals.by = 'selector'; vals.value = cand.selector; }
+          }
+          render();
+        }, () => { waiting = true; render(); });
+      });
+      const current = vals.value
+        ? el('code', { className: 'cfg-current', textContent: vals.value, title: vals.value })
+        : el('span', { className: 'muted', textContent: '(none)' });
+      const edit = el('button', { type: 'button', className: 'link-btn', textContent: manualEdit ? 'Done' : 'Manual edit' });
+      edit.addEventListener('click', () => { manualEdit = !manualEdit; render(); if (manualEdit) inputs[f.key].focus(); });
+      const input = control({ ...f, type: 'text', mono: true });
+      input.hidden = !manualEdit;
+      input.addEventListener('input', () => { current.textContent = input.value || '(none)'; });
+      const nodes = [
+        el('div', { className: 'cfg-title', textContent: f.label }),
+        el('p', { className: 'cfg-desc', textContent: val(f.desc, vals) }),
+        pickBtn,
+      ];
+      if (waiting) {
+        const stop = el('button', { type: 'button', className: 'link-btn', textContent: 'Cancel' });
+        stop.addEventListener('click', () => { cancelPick(); waiting = false; render(); });
+        nodes.push(el('p', { className: 'cfg-desc' }, ['Switch to any tab and click the element there. ', stop]));
+      }
+      nodes.push(el('div', { className: 'cfg-status' }, [el('span', { textContent: `${isText ? 'Text' : 'Selector'}: ` }), current, el('span', { className: 'spacer' }), edit]), input);
+      return el('section', { className: 'cfg-section' }, nodes);
+    }
+
+    function fieldSection(fields) {
+      const first = fields[0];
+      const desc = val(first.desc, vals);
+      const hint = val(first.hint, vals);
+      // Native <select>s become custom dropdowns (enhanced once they have a parent).
+      const ctrl = (f) => {
+        const input = control(f);
+        if (f.type !== 'select') return input;
+        const box = el('div', { className: 'fb-select-wrap' }, [input]);
+        FB.enhanceSelect(input);
+        return box;
+      };
+      const controls = fields.length > 1
+        ? el('div', { className: 'cf-row' }, fields.map((f) => el('label', { className: 'cf' }, [f.short || val(f.label, vals), ctrl(f)])))
+        : ctrl(first);
+      return el('section', { className: 'cfg-section' }, [
+        el('div', { className: 'cfg-title', textContent: val(first.label, vals) }),
+        ...(desc ? [el('p', { className: 'cfg-desc', textContent: desc })] : []),
+        controls,
+        ...(hint ? [el('span', { className: 'hint muted', textContent: hint })] : []),
+      ]);
+    }
+
+    function render() {
+      const sections = [];
+      const groups = [];
       for (const f of c.fields) {
         if (f.show && !f.show(vals)) continue;
-        const opts = val(f.options, vals);
-        let input;
-        if (f.type === 'select') {
-          input = el('select', {}, (opts || []).map(([v, label]) => el('option', { value: v, textContent: label })));
-          if (!opts || !opts.length) input.append(el('option', { value: '', textContent: '(nothing to choose)' }));
-          input.value = vals[f.key];
-          if (input.value !== vals[f.key]) vals[f.key] = input.value;
-        } else {
-          input = el('input', { type: val(f.type, vals) || 'text', value: vals[f.key] ?? '', className: f.mono ? 'mono' : '', spellcheck: false });
-        }
-        input.addEventListener(f.type === 'select' ? 'change' : 'input', () => {
-          vals[f.key] = input.value;
-          if (f.type === 'select') renderFields();
-          else updateOut();
-        });
-        inputs[f.key] = input;
-        const hint = val(f.hint, vals);
-        const label = el('label', { className: 'cf' }, [val(f.label, vals), input, ...(hint ? [el('span', { className: 'hint muted', textContent: hint })] : [])]);
-        if (f.row) {
-          if (!rows.has(f.row)) { const r = el('div', { className: 'cf-row' }); rows.set(f.row, r); nodes.push(r); }
-          rows.get(f.row).append(label);
-        } else nodes.push(label);
+        if (f.advanced) continue;
+        const last = groups[groups.length - 1];
+        if (f.row && last && last[0].row === f.row) last.push(f);
+        else groups.push([f]);
       }
-      fieldWrap.replaceChildren(...nodes);
+      for (const g of groups) sections.push(g[0].type === 'element' ? elementSection(g[0]) : fieldSection(g));
+      const adv = c.fields.filter((f) => f.advanced && (!f.show || f.show(vals)));
+      if (adv.length) {
+        const toggle = el('button', { type: 'button', className: 'adv-toggle' }, [FB.icon('chevron'), showAdvanced ? 'Hide advanced settings' : 'Show advanced settings']);
+        toggle.classList.toggle('open', showAdvanced);
+        toggle.addEventListener('click', () => { showAdvanced = !showAdvanced; render(); });
+        sections.push(toggle);
+        if (showAdvanced) for (const f of adv) sections.push(fieldSection([f]));
+      }
+      body.replaceChildren(...sections);
       updateOut();
     }
 
@@ -905,9 +1051,10 @@
       for (const f of c.fields) {
         if (f.show && !f.show(vals)) continue;
         const v = String(vals[f.key] ?? '').trim();
-        if (f.required && !v) return { f, msg: `${val(f.label, vals)} is required.` };
+        const label = val(f.label, vals);
+        if (f.required && !v) return { f, msg: f.type === 'element' ? 'Select an element on a web page, or use Manual edit.' : `${label} is required.` };
         if (v && f.pattern && !f.pattern.test(v)) return { f, msg: f.patternMsg };
-        if (v && val(f.type, vals) === 'number' && Number.isNaN(Number(v))) return { f, msg: `${val(f.label, vals)} must be a number.` };
+        if (v && val(f.type, vals) === 'number' && Number.isNaN(Number(v))) return { f, msg: `${label} must be a number.` };
       }
       return null;
     }
@@ -915,45 +1062,33 @@
     function updateOut() {
       const m = missing();
       out.textContent = m ? '…' : c.build(vals);
+      ok.disabled = !!m;
       err.hidden = true;
     }
 
-    const cancel = el('button', { type: 'button', className: 'outline', textContent: 'Cancel' });
-    const ok = el('button', { type: 'submit', className: 'primary' }, [FB.icon('plus'), 'Insert']);
-    form.append(
-      el('div', { className: 'cmd-dialog-head' }, [FB.icon(c.icon), el('div', {}, [el('h3', { textContent: c.title }), el('p', { textContent: c.desc })])]),
-      fieldWrap,
-      el('label', { className: 'cf', textContent: 'Will insert' }),
-      out,
-      err,
-      el('div', { className: 'fb-dialog-actions' }, [cancel, ok]),
-    );
-    dlg.append(form);
-    document.body.append(dlg);
-    renderFields();
-
-    cancel.addEventListener('click', () => dlg.close());
-    dlg.addEventListener('mousedown', (e) => { if (e.target === dlg) dlg.close(); });
-    dlg.addEventListener('close', () => dlg.remove());
-    form.addEventListener('submit', (e) => {
-      e.preventDefault();
+    ok.addEventListener('click', () => {
       const m = missing();
       if (m) {
         err.textContent = m.msg;
         err.hidden = false;
-        if (inputs[m.f.key]) inputs[m.f.key].focus();
         return;
       }
       const text = c.build(vals);
-      dlg.close();
+      showList();
       insertAtCursor(text);
     });
-    dlg.showModal();
-    const first = fieldWrap.querySelector('input, select');
+
+    render();
+    const first = body.querySelector('input:not([hidden]), .fb-select, .pick-btn');
     if (first) first.focus();
   }
 
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !$('cmd-config').hidden && !document.querySelector('.fb-select-menu') && !document.querySelector('dialog[open]')) showList();
+  });
+
   renderCommands();
+
 
   // ---------- settings ----------
   async function openSettings() {

@@ -39,6 +39,9 @@
     variable: '<path d="M8 4c-2 2.5-2 13.5 0 16M16 4c2 2.5 2 13.5 0 16M10 9l4 6M14 9l-4 6"/>',
     sigma: '<path d="M18 6V4H6l6 8-6 8h12v-2"/>',
     cursor: '<path d="M9 4h6M9 20h6M12 4v16"/>',
+    chevron: '<path d="m6 9 6 6 6-6"/>',
+    back: '<path d="M19 12H5M11 18l-6-6 6-6"/>',
+    help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17h.01"/>',
   };
 
   function iconSvg(name) {

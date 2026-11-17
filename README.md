@@ -27,8 +27,11 @@ After editing code: click ↻ on the extension card, then reload the page.
   fields, **Try it out** popover, **Edit / Preview** switch, syntax-highlighted
   template, **Format** (one command per line using `\` line continuations, same
   output) / **Compact**, `{import: /…}` autocomplete, and a **Dynamic commands**
-  panel (search, then a form with dropdowns builds the command for you).
-  In Preview, click a step to jump to its source. Sidebar: collapsible folders, drag snippets to
+  panel (search, then a side-panel form with styled dropdowns builds the command).
+  **Click element** has **Select from website**: the picker opens on your last tab and
+  follows you to any tab you switch to; the chosen selector comes back to the editor.
+  In Preview, click a step to jump to its source. The workspace is fixed; only the
+  sidebar, editor and command panel scroll. Sidebar: collapsible folders, drag snippets to
   reorder or move between folders, right-click (or ⋯) menus for folders
   (new snippet, rename, sort, disable/enable, delete) and snippets (duplicate,
   move to folder, rename, delete). Disabled folders are listed separately and
@@ -51,6 +54,7 @@ After editing code: click ↻ on the extension card, then reload the page.
 | `{import: /id}` | Insert another snippet |
 | `{click: selector=CSS}` | Wait ≤5s for visible element, click; following text types into focus |
 | `{click: text=Label}` | Click element whose visible text equals Label (`selector=` narrows the search) |
+| `{click: …; maxdelay=3s}` | Wait up to this long for the element (default: Settings) |
 | `{clear}` / `{clear: selector=CSS}` | Empty focused (or matched) field before typing |
 | `{select: selector=CSS; value=10}` | Native `<select>` by `value=`, `text=` or `index=` |
 | `{wait: 500ms}` `{key: enter\|tab\|escape\|up\|down}` | Pause / key press |
