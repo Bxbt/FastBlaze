@@ -283,10 +283,11 @@
       $('f-name').value = hit.s.name;
       $('f-shortcut').value = hit.s.shortcut;
       $('f-text').value = hit.s.text;
-      $('f-folder').replaceChildren(...data.folders.map((f) => el('option', { value: f.id, textContent: f.name })));
-      $('f-folder').value = hit.f.id;
       $('saved').textContent = '';
       updateDupWarning();
+      taTouched = false;
+      $('try-pop').hidden = true;
+      highlight();
       renderPreview();
     }
     renderTree();
@@ -316,17 +317,11 @@
     hit.s.name = $('f-name').value;
     hit.s.shortcut = $('f-shortcut').value.trim();
     hit.s.text = $('f-text').value;
-    const target = $('f-folder').value;
-    if (target !== hit.f.id) {
-      hit.f.snippets = hit.f.snippets.filter((s) => s !== hit.s);
-      data.folders.find((f) => f.id === target).snippets.push(hit.s);
-    }
     updateDupWarning();
     renderTree();
     schedulePersist();
   }
 
-  let previewTimer = null;
   function renderPreview() {
     const hit = findSnippet(selectedId);
     if (!hit) return;
@@ -334,7 +329,9 @@
     const { actions, errors } = FB.compile(hit.s.text, { lookup });
     $('preview-list').replaceChildren(...actions.map((a) => {
       const detail = a.type === 'text' ? a.value : FB.describeAction(a).replace(/^\w+ /, '');
-      return el('li', {}, [el('span', { className: `kind ${a.type}`, textContent: a.type }), el('span', { className: 'mono', textContent: detail })]);
+      const li = el('li', { title: 'Jump to this step in the template' }, [el('span', { className: `kind ${a.type}`, textContent: a.type }), el('span', { className: 'mono', textContent: detail })]);
+      li.addEventListener('click', () => jumpTo(a.src));
+      return li;
     }));
     $('preview-errors').hidden = !errors.length;
     $('preview-errors').textContent = errors.join('\n');
@@ -460,12 +457,7 @@
   }
 
   // ---------- wiring ----------
-  for (const id of ['f-name', 'f-shortcut', 'f-folder']) $(id).addEventListener('input', onEdit);
-  $('f-text').addEventListener('input', () => {
-    onEdit();
-    clearTimeout(previewTimer);
-    previewTimer = setTimeout(renderPreview, 300);
-  });
+  for (const id of ['f-name', 'f-shortcut']) $(id).addEventListener('input', onEdit);
   $('editor').addEventListener('submit', (e) => e.preventDefault());
   $('search').addEventListener('input', renderTree);
   $('new-snippet').addEventListener('click', () => newSnippet());
@@ -503,13 +495,465 @@
     if (area === 'local' && changes[LAST_PICK_KEY]) showPick(changes[LAST_PICK_KEY].newValue);
   });
   $('insert-pick').addEventListener('click', () => {
-    if (!lastPick) return;
-    const ta = $('f-text');
-    ta.focus();
-    ta.setRangeText(lastPick.command, ta.selectionStart, ta.selectionEnd, 'end');
-    onEdit();
-    renderPreview();
+    if (lastPick) insertAtCursor(lastPick.command);
   });
+
+  // ---------- code editor: highlight, insert, format, modes ----------
+  const ta = $('f-text');
+  let taTouched = false;
+
+  function highlight() {
+    const toks = FB.tokenizeTemplate(ta.value);
+    $('code-hl').replaceChildren(
+      ...toks.map((t) => (t.kind === 'text'
+        ? document.createTextNode(t.text)
+        : el('span', { className: `tok tok-${t.kind}`, textContent: t.text, title: t.kind === 'unknown' ? 'Unknown command' : '' }))),
+      document.createTextNode('\n'),
+    );
+    autoGrow();
+  }
+
+  // The textarea grows with its content, so the highlight layer never has to scroll.
+  function autoGrow() {
+    if ($('edit-pane').hidden) return;
+    ta.style.height = 'auto';
+    ta.style.height = `${Math.max(360, ta.scrollHeight)}px`;
+  }
+
+  let previewDebounce = null;
+  function afterTextChange() {
+    onEdit();
+    highlight();
+    clearTimeout(previewDebounce);
+    previewDebounce = setTimeout(renderPreview, 300);
+  }
+
+  /** Insert at the caret. One «…» marker in `text` is selected afterwards. */
+  function insertAtCursor(text) {
+    const m = text.indexOf('«');
+    const n = text.indexOf('»');
+    const clean = text.replace(/[«»]/g, '');
+    setMode('edit');
+    ta.focus();
+    if (!taTouched) ta.setSelectionRange(ta.value.length, ta.value.length);
+    const start = ta.selectionStart;
+    if (!document.execCommand('insertText', false, clean)) {
+      ta.setRangeText(clean, ta.selectionStart, ta.selectionEnd, 'end');
+      afterTextChange();
+    }
+    if (m !== -1 && n > m) ta.setSelectionRange(start + m, start + n - 1);
+    taTouched = true;
+  }
+
+  /** Replace the whole template, keeping undo history. */
+  function replaceTemplate(text) {
+    if (text === ta.value) return;
+    ta.focus();
+    ta.select();
+    if (!document.execCommand('insertText', false, text)) {
+      ta.value = text;
+      afterTextChange();
+    }
+  }
+
+  ta.addEventListener('input', () => { taTouched = true; afterTextChange(); updateAutocomplete(); });
+  ta.addEventListener('click', () => { taTouched = true; updateAutocomplete(); });
+  ta.addEventListener('keyup', (e) => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) updateAutocomplete(); });
+  window.addEventListener('resize', autoGrow);
+  $('fmt-format').addEventListener('click', () => replaceTemplate(FB.formatTemplate(ta.value)));
+  $('fmt-compact').addEventListener('click', () => replaceTemplate(FB.compactTemplate(ta.value)));
+
+  let mode = 'edit';
+  function setMode(m) {
+    mode = m;
+    $('mode-edit').setAttribute('aria-pressed', String(m === 'edit'));
+    $('mode-preview').setAttribute('aria-pressed', String(m === 'preview'));
+    $('edit-pane').hidden = m !== 'edit';
+    $('preview-pane').hidden = m !== 'preview';
+    for (const id of ['fmt-format', 'fmt-compact']) $(id).disabled = m !== 'edit';
+    closeAc();
+    if (m === 'preview') renderPreview();
+    else autoGrow();
+  }
+  $('mode-edit').addEventListener('click', () => setMode('edit'));
+  $('mode-preview').addEventListener('click', () => setMode('preview'));
+
+  // Screen rectangle of the character at `offset`, measured on the highlight layer
+  // (it has exactly the same text and layout as the textarea).
+  function charRect(offset) {
+    const pre = $('code-hl');
+    const walker = document.createTreeWalker(pre, NodeFilter.SHOW_TEXT);
+    let pos = 0;
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const len = node.data.length;
+      if (offset <= pos + len && len) {
+        const o = Math.min(offset - pos, len - 1);
+        const r = document.createRange();
+        r.setStart(node, o);
+        r.setEnd(node, o + 1);
+        return r.getClientRects()[0] || r.getBoundingClientRect();
+      }
+      pos += len;
+    }
+    return pre.getBoundingClientRect();
+  }
+
+  /** Jump from a preview step to the template text that produced it. */
+  function jumpTo(src) {
+    if (!src) return;
+    setMode('edit');
+    ta.focus();
+    ta.setSelectionRange(src.start, src.end);
+    const r = charRect(src.start);
+    if (r.top < 90 || r.bottom > innerHeight - 40) window.scrollBy({ top: r.top - innerHeight / 3, behavior: 'smooth' });
+  }
+
+  // ---------- import autocomplete ----------
+  let ac = { open: false, items: [], index: 0, from: 0 };
+
+  function closeAc() {
+    ac.open = false;
+    $('ac').hidden = true;
+  }
+
+  function updateAutocomplete() {
+    const pos = ta.selectionStart;
+    if (pos !== ta.selectionEnd) return closeAc();
+    const m = ta.value.slice(0, pos).match(/\{import:\s*(\/?[^\s;{}]*)$/);
+    if (!m) return closeAc();
+    const q = m[1].toLowerCase().replace(/^\//, '');
+    const items = allSnippets().map((x) => x.s)
+      .filter((s) => s.shortcut && s.id !== selectedId)
+      .filter((s) => !q || s.shortcut.toLowerCase().slice(1).startsWith(q) || (s.name || '').toLowerCase().includes(q))
+      .slice(0, 8);
+    if (!items.length) return closeAc();
+    ac = { open: true, items, index: Math.min(ac.open ? ac.index : 0, items.length - 1), from: pos - m[1].length };
+    renderAc();
+  }
+
+  function renderAc() {
+    const box = $('ac');
+    box.replaceChildren(...ac.items.map((s, i) => {
+      const item = el('div', { className: `ac-item${i === ac.index ? ' active' : ''}`, role: 'option' }, [
+        el('span', { className: 'chip', textContent: s.shortcut }),
+        el('span', { className: 'name', textContent: s.name || '' }),
+      ]);
+      item.addEventListener('mousedown', (e) => { e.preventDefault(); acceptAc(i); });
+      return item;
+    }));
+    const wrap = $('edit-pane').getBoundingClientRect();
+    const r = charRect(Math.max(0, ta.selectionStart - 1));
+    box.style.left = `${Math.min(r.left - wrap.left, wrap.width - 260)}px`;
+    box.style.top = `${r.bottom - wrap.top + 6}px`;
+    box.hidden = false;
+  }
+
+  function acceptAc(i) {
+    const s = ac.items[i];
+    if (!s) return;
+    ta.setSelectionRange(ac.from, ta.selectionStart);
+    const close = ta.value[ta.selectionEnd] === '}' ? '' : '}';
+    closeAc();
+    if (!document.execCommand('insertText', false, s.shortcut + close)) {
+      ta.setRangeText(s.shortcut + close, ta.selectionStart, ta.selectionEnd, 'end');
+      afterTextChange();
+    }
+  }
+
+  ta.addEventListener('keydown', (e) => {
+    if (!ac.open) return;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      ac.index = (ac.index + (e.key === 'ArrowDown' ? 1 : -1) + ac.items.length) % ac.items.length;
+      renderAc();
+    } else if (e.key === 'Enter' || e.key === 'Tab') {
+      e.preventDefault();
+      acceptAc(ac.index);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      closeAc();
+    }
+  });
+  ta.addEventListener('blur', () => setTimeout(closeAc, 150));
+
+  // ---------- Try it out popover ----------
+  function closeTry() { $('try-pop').hidden = true; }
+  $('try-btn').addEventListener('click', () => {
+    const pop = $('try-pop');
+    if (!pop.hidden) return closeTry();
+    clearTimeout(saveTimer);
+    persist(); // the expander reads saved snippets
+    const sc = $('f-shortcut').value.trim();
+    $('try-chip').textContent = sc || '(no shortcut yet)';
+    $('try-box').value = '';
+    pop.hidden = false;
+    $('try-box').focus();
+  });
+  document.addEventListener('mousedown', (e) => {
+    if (!$('try-pop').hidden && !e.target.closest('.shortcut-field')) closeTry();
+  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('try-pop').hidden) closeTry(); });
+
+  // ---------- dynamic commands ----------
+  const tplArg = (s) => String(s).replace(/[\\{};]/g, '\\$&');
+  const KEYS = [['enter', 'Enter'], ['tab', 'Tab'], ['escape', 'Escape'], ['up', 'Arrow up'], ['down', 'Arrow down'],
+    ['left', 'Arrow left'], ['right', 'Arrow right'], ['space', 'Space'], ['backspace', 'Backspace']];
+  const snippetOptions = () => allSnippets().map((x) => x.s).filter((s) => s.shortcut && s.id !== selectedId)
+    .map((s) => [s.shortcut, `${s.shortcut}  ${s.name ? `— ${s.name}` : ''}`]);
+
+  const COMMANDS = [
+    {
+      id: 'click', group: 'Automation', frequent: true, icon: 'mouse', title: 'Click element',
+      desc: 'Click an element on the page, then type into it', keywords: 'button selector testid tap',
+      fields: [
+        { key: 'by', label: 'Find the element by', type: 'select', options: [['selector', 'CSS selector'], ['text', 'Visible text']], value: 'selector' },
+        { key: 'value', label: (v) => (v.by === 'text' ? 'Text shown on the element' : 'CSS selector'), required: true, mono: true,
+          hint: (v) => (v.by === 'text' ? 'Exact text, e.g. an option in a dropdown.' : 'Tip: Pick in the popup copies a reliable selector.') },
+        { key: 'within', label: 'Only inside (CSS selector, optional)', mono: true, show: (v) => v.by === 'text' },
+      ],
+      build: (v) => (v.by === 'text'
+        ? `{click: text=${tplArg(v.value)}${v.within ? `; selector=${tplArg(v.within)}` : ''}}`
+        : `{click: selector=${tplArg(v.value)}}`),
+    },
+    {
+      id: 'select', group: 'Automation', icon: 'list', title: 'Choose option',
+      desc: 'Pick an option in a native dropdown (<select>)', keywords: 'dropdown select option',
+      fields: [
+        { key: 'selector', label: 'Dropdown (CSS selector)', required: true, mono: true },
+        { key: 'by', label: 'Match option by', type: 'select', options: [['text', 'Option text'], ['value', 'Option value'], ['index', 'Position (0 = first)']], value: 'text' },
+        { key: 'value', label: (v) => ({ text: 'Option text', value: 'Option value', index: 'Position' })[v.by], required: true,
+          type: (v) => (v.by === 'index' ? 'number' : 'text') },
+      ],
+      build: (v) => `{select: selector=${tplArg(v.selector)}; ${v.by}=${tplArg(v.value)}}`,
+    },
+    {
+      id: 'clear', group: 'Automation', icon: 'eraser', title: 'Clear field',
+      desc: 'Empty a field before typing', keywords: 'erase reset empty',
+      fields: [
+        { key: 'target', label: 'Which field', type: 'select', options: [['focused', 'The focused field'], ['selector', 'Field matching a CSS selector']], value: 'focused' },
+        { key: 'selector', label: 'CSS selector', required: true, mono: true, show: (v) => v.target === 'selector' },
+      ],
+      build: (v) => (v.target === 'selector' ? `{clear: selector=${tplArg(v.selector)}}` : '{clear}'),
+    },
+    {
+      id: 'key', group: 'Automation', icon: 'keycap', title: 'Press key',
+      desc: 'Enter, Tab, Escape, arrows…', keywords: 'keyboard enter tab escape',
+      fields: [{ key: 'key', label: 'Key', type: 'select', options: KEYS, value: 'enter' }],
+      build: (v) => `{key: ${v.key}}`,
+    },
+    {
+      id: 'wait', group: 'Automation', icon: 'clock', title: 'Wait',
+      desc: 'Pause before the next step', keywords: 'delay sleep pause',
+      fields: [
+        { key: 'amount', label: 'Duration', type: 'number', required: true, value: '500', row: 'dur' },
+        { key: 'unit', label: 'Unit', type: 'select', options: [['ms', 'Milliseconds'], ['s', 'Seconds']], value: 'ms', row: 'dur' },
+      ],
+      build: (v) => `{wait: ${Number(v.amount)}${v.unit}}`,
+    },
+    {
+      id: 'formtext', group: 'Forms', frequent: true, icon: 'textfield', title: 'Text field',
+      desc: 'Ask for a value before inserting', keywords: 'form input ask prompt',
+      fields: [
+        { key: 'name', label: 'Field name', required: true },
+        { key: 'default', label: 'Default value (optional)' },
+        { key: 'cols', label: 'Max length (optional)', type: 'number' },
+      ],
+      build: (v) => `{formtext: name=${tplArg(v.name)}${v.default ? `; default=${tplArg(v.default)}` : ''}${v.cols ? `; cols=${Number(v.cols)}` : ''}}`,
+    },
+    {
+      id: 'formmenu', group: 'Forms', icon: 'dropdown', title: 'Dropdown menu',
+      desc: 'Ask the user to choose from a list', keywords: 'form menu choose options',
+      fields: [
+        { key: 'name', label: 'Field name', required: true },
+        { key: 'options', label: 'Options (comma separated, first = default)', required: true },
+      ],
+      build: (v) => {
+        const opts = v.options.split(',').map((o) => o.trim()).filter(Boolean).map(tplArg);
+        return `{formmenu: name=${tplArg(v.name)}; default=${opts[0] || ''}${opts.slice(1).map((o) => `; ${o}`).join('')}}`;
+      },
+    },
+    {
+      id: 'formparagraph', group: 'Forms', icon: 'paragraph', title: 'Paragraph field',
+      desc: 'Ask for multi-line text', keywords: 'form textarea multiline',
+      fields: [
+        { key: 'name', label: 'Field name', required: true },
+        { key: 'default', label: 'Default value (optional)' },
+      ],
+      build: (v) => `{formparagraph: name=${tplArg(v.name)}${v.default ? `; default=${tplArg(v.default)}` : ''}}`,
+    },
+    {
+      id: 'thaiid', group: 'Data', frequent: true, icon: 'idcard', title: 'Thai ID (test)',
+      desc: 'Random 13-digit ID with a valid check digit', keywords: 'id card citizen number',
+      fields: [
+        { key: 'prefix', label: 'First digit', type: 'select', value: '8',
+          options: [['', 'Any (1–8)'], ...[1, 2, 3, 4, 5, 6, 7, 8].map((d) => [String(d), String(d)])] },
+        { key: 'format', label: 'Format', type: 'select', options: [['plain', '13 digits'], ['dash', 'With dashes (x-xxxx-xxxxx-xx-x)']], value: 'plain' },
+      ],
+      build: (v) => {
+        const args = [v.prefix ? `prefix=${v.prefix}` : '', v.format === 'dash' ? 'format=dash' : ''].filter(Boolean);
+        return args.length ? `{thaiid: ${args.join('; ')}}` : '{thaiid}';
+      },
+    },
+    {
+      id: 'random', group: 'Data', icon: 'dice', title: 'Random number',
+      desc: 'A random number in a range', keywords: 'random number digit',
+      fields: [
+        { key: 'min', label: 'Min', type: 'number', required: true, value: '0', row: 'range' },
+        { key: 'max', label: 'Max', type: 'number', required: true, value: '9', row: 'range' },
+        { key: 'kind', label: 'Type', type: 'select', options: [['whole', 'Whole number'], ['decimal', 'Decimal']], value: 'whole' },
+      ],
+      build: (v) => `{random-number: min=${Number(v.min)}; max=${Number(v.max)}${v.kind === 'decimal' ? '; rounded=no' : ''}}`,
+    },
+    {
+      id: 'import', group: 'Data', frequent: true, icon: 'fileplus', title: 'Import snippet',
+      desc: 'Embed another snippet', keywords: 'include reuse embed',
+      fields: [{ key: 'shortcut', label: 'Snippet', type: 'select', options: snippetOptions, required: true }],
+      build: (v) => `{import: ${v.shortcut}}`,
+    },
+    {
+      id: 'var', group: 'Logic', icon: 'variable', title: 'Set variable',
+      desc: 'Store a value to reuse later', keywords: 'variable assign let',
+      fields: [
+        { key: 'name', label: 'Variable name', required: true, mono: true, pattern: /^[A-Za-z_]\w*$/, patternMsg: 'Letters, digits and _ only; cannot start with a digit.' },
+        { key: 'value', label: 'Value or expression', required: true, mono: true, hint: 'e.g. 5, "text", a + 1, floor(x / 2)' },
+      ],
+      build: (v) => `{${v.name}=${v.value}}`,
+    },
+    {
+      id: 'expr', group: 'Logic', icon: 'sigma', title: 'Show value',
+      desc: 'Insert the result of an expression', keywords: 'calculate math expression formula',
+      fields: [{ key: 'expr', label: 'Expression', required: true, mono: true, hint: 'Variables, + - * / %, & joins text, floor() round() …' }],
+      build: (v) => `{=${v.expr}}`,
+    },
+  ];
+
+  function renderCommands() {
+    const q = $('cmd-q').value.trim().toLowerCase();
+    const item = (c) => {
+      const b = el('button', { type: 'button', className: 'cmd-item', title: c.desc }, [
+        el('span', { className: 'cmd-icon' }, [FB.icon(c.icon)]),
+        el('span', {}, [el('strong', { textContent: c.title }), el('span', { className: 'desc', textContent: c.desc })]),
+      ]);
+      b.addEventListener('click', () => openCommand(c));
+      return b;
+    };
+    const nodes = [];
+    if (q) {
+      const hits = COMMANDS.filter((c) => `${c.title} ${c.desc} ${c.keywords} ${c.id}`.toLowerCase().includes(q));
+      if (hits.length) nodes.push(...hits.map(item));
+      else nodes.push(el('div', { className: 'cmd-empty', textContent: 'No matching command.' }));
+    } else {
+      nodes.push(el('div', { className: 'cmd-group', textContent: 'Frequently used' }), ...COMMANDS.filter((c) => c.frequent).map(item));
+      for (const g of ['Automation', 'Forms', 'Data', 'Logic']) {
+        nodes.push(el('div', { className: 'cmd-group', textContent: g }), ...COMMANDS.filter((c) => c.group === g).map(item));
+      }
+    }
+    $('cmd-list').replaceChildren(...nodes);
+  }
+  $('cmd-q').addEventListener('input', renderCommands);
+
+  // Config dialog for one command: fields (inputs + dropdowns) and a live preview.
+  function openCommand(c) {
+    const dlg = el('dialog', { className: 'fb-dialog cmd-dialog' });
+    const form = el('form', { method: 'dialog' });
+    const vals = {};
+    const inputs = {};
+    const val = (x, v) => (typeof x === 'function' ? x(v) : x);
+
+    for (const f of c.fields) {
+      const opts = val(f.options, vals);
+      vals[f.key] = f.value ?? (opts && opts[0] ? opts[0][0] : '');
+    }
+
+    const out = el('code', { className: 'cmd-out' });
+    const fieldWrap = el('div');
+    const err = el('p', { className: 'warn', hidden: true });
+
+    function renderFields() {
+      const rows = new Map();
+      const nodes = [];
+      for (const f of c.fields) {
+        if (f.show && !f.show(vals)) continue;
+        const opts = val(f.options, vals);
+        let input;
+        if (f.type === 'select') {
+          input = el('select', {}, (opts || []).map(([v, label]) => el('option', { value: v, textContent: label })));
+          if (!opts || !opts.length) input.append(el('option', { value: '', textContent: '(nothing to choose)' }));
+          input.value = vals[f.key];
+          if (input.value !== vals[f.key]) vals[f.key] = input.value;
+        } else {
+          input = el('input', { type: val(f.type, vals) || 'text', value: vals[f.key] ?? '', className: f.mono ? 'mono' : '', spellcheck: false });
+        }
+        input.addEventListener(f.type === 'select' ? 'change' : 'input', () => {
+          vals[f.key] = input.value;
+          if (f.type === 'select') renderFields();
+          else updateOut();
+        });
+        inputs[f.key] = input;
+        const hint = val(f.hint, vals);
+        const label = el('label', { className: 'cf' }, [val(f.label, vals), input, ...(hint ? [el('span', { className: 'hint muted', textContent: hint })] : [])]);
+        if (f.row) {
+          if (!rows.has(f.row)) { const r = el('div', { className: 'cf-row' }); rows.set(f.row, r); nodes.push(r); }
+          rows.get(f.row).append(label);
+        } else nodes.push(label);
+      }
+      fieldWrap.replaceChildren(...nodes);
+      updateOut();
+    }
+
+    function missing() {
+      for (const f of c.fields) {
+        if (f.show && !f.show(vals)) continue;
+        const v = String(vals[f.key] ?? '').trim();
+        if (f.required && !v) return { f, msg: `${val(f.label, vals)} is required.` };
+        if (v && f.pattern && !f.pattern.test(v)) return { f, msg: f.patternMsg };
+        if (v && val(f.type, vals) === 'number' && Number.isNaN(Number(v))) return { f, msg: `${val(f.label, vals)} must be a number.` };
+      }
+      return null;
+    }
+
+    function updateOut() {
+      const m = missing();
+      out.textContent = m ? '…' : c.build(vals);
+      err.hidden = true;
+    }
+
+    const cancel = el('button', { type: 'button', className: 'outline', textContent: 'Cancel' });
+    const ok = el('button', { type: 'submit', className: 'primary' }, [FB.icon('plus'), 'Insert']);
+    form.append(
+      el('div', { className: 'cmd-dialog-head' }, [FB.icon(c.icon), el('div', {}, [el('h3', { textContent: c.title }), el('p', { textContent: c.desc })])]),
+      fieldWrap,
+      el('label', { className: 'cf', textContent: 'Will insert' }),
+      out,
+      err,
+      el('div', { className: 'fb-dialog-actions' }, [cancel, ok]),
+    );
+    dlg.append(form);
+    document.body.append(dlg);
+    renderFields();
+
+    cancel.addEventListener('click', () => dlg.close());
+    dlg.addEventListener('mousedown', (e) => { if (e.target === dlg) dlg.close(); });
+    dlg.addEventListener('close', () => dlg.remove());
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const m = missing();
+      if (m) {
+        err.textContent = m.msg;
+        err.hidden = false;
+        if (inputs[m.f.key]) inputs[m.f.key].focus();
+        return;
+      }
+      const text = c.build(vals);
+      dlg.close();
+      insertAtCursor(text);
+    });
+    dlg.showModal();
+    const first = fieldWrap.querySelector('input, select');
+    if (first) first.focus();
+  }
+
+  renderCommands();
 
   // ---------- settings ----------
   async function openSettings() {

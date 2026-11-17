@@ -67,7 +67,7 @@
           runTemplate(text, ctx);
           return '';
         }
-        const sub = { ...ctx, actions: [] };
+        const sub = { ...ctx, actions: [], nested: true };
         runTemplate(text, sub);
         ctx.fieldCounter = sub.fieldCounter;
         return sub.actions.filter((x) => x.type === 'text').map((x) => x.value).join('');
@@ -140,7 +140,7 @@
   }
 
   function textOf(template, ctx) {
-    const sub = { ...ctx, actions: [], fields: null };
+    const sub = { ...ctx, actions: [], fields: null, nested: true };
     runTemplate(template, sub);
     return sub.actions.filter((x) => x.type === 'text').map((x) => x.value).join('');
   }
@@ -166,7 +166,9 @@
   }
 
   function runTemplate(template, ctx) {
+    const top = ctx.depth === 0 && !ctx.nested;
     for (const node of FB.parseTemplate(template)) {
+      const before = ctx.actions.length;
       try {
         switch (node.type) {
           case 'text': emitText(ctx, node.value); break;
@@ -177,6 +179,12 @@
       } catch (err) {
         ctx.errors.push(`${node.raw || node.type}: ${err.message}`);
       }
+      // Remember which part of the source produced each action (editor navigation).
+      if (top) {
+        for (let i = before; i < ctx.actions.length; i++) {
+          if (!ctx.actions[i].src) ctx.actions[i].src = { start: node.start, end: node.end };
+        }
+      }
     }
   }
 
@@ -184,8 +192,10 @@
     const out = [];
     for (const a of actions) {
       const last = out[out.length - 1];
-      if (a.type === 'text' && last && last.type === 'text') last.value += a.value;
-      else out.push({ ...a });
+      if (a.type === 'text' && last && last.type === 'text') {
+        last.value += a.value;
+        if (last.src && a.src) last.src = { start: last.src.start, end: a.src.end };
+      } else out.push({ ...a });
     }
     return out;
   }

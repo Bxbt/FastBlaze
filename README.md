@@ -23,8 +23,12 @@ After editing code: click ↻ on the extension card, then reload the page.
 - **Pick** (popup button or `Alt+Shift+P`): hover an element (yellow box), click it
   to get ranked selectors (stable / ok / fragile). The best command is copied and
   available as **Insert picked** in the editor. `↑`/`↓` = parent/child, `Esc` = cancel.
-- Options page: welcome page with a try-out box, edit snippets with live preview
-  and a per-snippet try-out box. Sidebar: collapsible folders, drag snippets to
+- Options page: welcome page with a try-out box. Snippet editor with Label / Shortcut
+  fields, **Try it out** popover, **Edit / Preview** switch, syntax-highlighted
+  template, **Format** (one command per line using `\` line continuations, same
+  output) / **Compact**, `{import: /…}` autocomplete, and a **Dynamic commands**
+  panel (search, then a form with dropdowns builds the command for you).
+  In Preview, click a step to jump to its source. Sidebar: collapsible folders, drag snippets to
   reorder or move between folders, right-click (or ⋯) menus for folders
   (new snippet, rename, sort, disable/enable, delete) and snippets (duplicate,
   move to folder, rename, delete). Disabled folders are listed separately and
@@ -51,6 +55,7 @@ After editing code: click ↻ on the extension card, then reload the page.
 | `{select: selector=CSS; value=10}` | Native `<select>` by `value=`, `text=` or `index=` |
 | `{wait: 500ms}` `{key: enter\|tab\|escape\|up\|down}` | Pause / key press |
 | `\{` `\\` | Literal brace / backslash |
+| `\` at end of line | Line continuation (line break + next indent ignored) |
 
 ## Develop
 

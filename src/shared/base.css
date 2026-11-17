@@ -26,6 +26,9 @@
   --code-bg: #eef1fc;
   --code-fg: #3346a8;
   --ok: #15803d;
+  --tok-data: #0369a1;
+  --tok-import: #c2410c;
+  --tok-expr: #7e22ce;
   color-scheme: light;
 }
 
@@ -43,6 +46,9 @@
     --code-bg: #15225f;
     --code-fg: #a9b8f5;
     --ok: #4ade80;
+    --tok-data: #38bdf8;
+    --tok-import: #fb923c;
+    --tok-expr: #c084fc;
     color-scheme: dark;
   }
 }
@@ -59,6 +65,9 @@
   --code-bg: #15225f;
   --code-fg: #a9b8f5;
   --ok: #4ade80;
+  --tok-data: #38bdf8;
+  --tok-import: #fb923c;
+  --tok-expr: #c084fc;
   color-scheme: dark;
 }
 
@@ -141,3 +150,16 @@ code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .icon-wrap { display: inline-flex; vertical-align: -3px; margin-right: 6px; }
 .icon-only .icon-wrap, .menu-icon .icon-wrap { margin-right: 0; }
 button.icon-only { display: inline-grid; place-items: center; padding: 5px 7px; }
+
+/* Dropdowns: one consistent look (custom chevron) */
+select {
+  -webkit-appearance: none;
+  appearance: none;
+  padding-right: 30px;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238e9bd6' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 9px center;
+  background-size: 14px;
+}
+select:hover { border-color: var(--muted); }
