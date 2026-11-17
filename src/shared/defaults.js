@@ -3,6 +3,12 @@
   'use strict';
   const FB = (globalThis.FastBlaze = globalThis.FastBlaze || {});
 
+  FB.DEFAULT_SETTINGS = {
+    highlight: true, // yellow flash on clicked elements
+    stepDelay: 60, // ms pause after each click / key
+    timeout: 5000, // ms to wait for an element to appear
+  };
+
   FB.DEFAULT_DATA = {
     version: 1,
     folders: [

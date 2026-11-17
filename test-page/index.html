@@ -27,6 +27,13 @@
   <div class="select">
     <button type="button" data-testid="select-sub-district">— choose —</button>
   </div>
+  <label>Province (native select)</label>
+  <select data-testid="select-province">
+    <option value="">— เลือก —</option>
+    <option value="10">กรุงเทพมหานคร</option>
+    <option value="50">เชียงใหม่</option>
+    <option value="40">ขอนแก่น</option>
+  </select>
   <label>Notes (textarea)</label><textarea data-testid="input-notes" rows="3"></textarea>
   <label>Rich text (contenteditable)</label>
   <div contenteditable="true" data-testid="rich" style="border:1px solid #999;min-height:40px;padding:6px"></div>
@@ -40,6 +47,9 @@
     const show = () => { mirror.textContent = JSON.stringify(state, null, 1); };
     document.querySelectorAll('input, textarea').forEach((el) => {
       el.addEventListener('input', () => { state[el.dataset.testid] = el.value; show(); });
+    });
+    document.querySelectorAll('select').forEach((el) => {
+      el.addEventListener('change', () => { state[el.dataset.testid] = el.value; show(); });
     });
 
     // Custom dropdown that renders options only after a click (like Headless UI).

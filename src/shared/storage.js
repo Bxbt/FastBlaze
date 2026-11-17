@@ -75,5 +75,33 @@
     };
   }
 
-  FB.storage = { KEY, uid, normalize, load, save, flatten, mergeImport, toTextBlaze };
+  const SETTINGS_KEY = 'fastblaze.settings';
+
+  function normalizeSettings(s) {
+    const d = FB.DEFAULT_SETTINGS;
+    const num = (v, def, min, max) => {
+      const n = Number(v);
+      return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : def;
+    };
+    s = s || {};
+    return {
+      highlight: s.highlight ?? d.highlight,
+      stepDelay: num(s.stepDelay, d.stepDelay, 0, 5000),
+      timeout: num(s.timeout, d.timeout, 500, 60000),
+    };
+  }
+
+  async function loadSettings() {
+    const got = await chrome.storage.local.get(SETTINGS_KEY);
+    return normalizeSettings(got[SETTINGS_KEY]);
+  }
+
+  async function saveSettings(s) {
+    await chrome.storage.local.set({ [SETTINGS_KEY]: normalizeSettings(s) });
+  }
+
+  FB.storage = {
+    KEY, SETTINGS_KEY, uid, normalize, load, save, flatten, mergeImport, toTextBlaze,
+    normalizeSettings, loadSettings, saveSettings,
+  };
 })();

@@ -9,6 +9,8 @@
   let byShortcut = new Map();
   let shortcuts = [];
   let busy = false;
+  let currentRun = null;
+  let settings = FB.storage.normalizeSettings();
 
   function index(data) {
     snippets = FB.storage.flatten(data);
@@ -17,9 +19,21 @@
   }
 
   FB.storage.load().then(index);
+  FB.storage.loadSettings().then((s) => { settings = s; });
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === 'local' && changes[FB.storage.KEY]) index(changes[FB.storage.KEY].newValue);
+    if (area !== 'local') return;
+    if (changes[FB.storage.KEY]) index(changes[FB.storage.KEY].newValue);
+    if (changes[FB.storage.SETTINGS_KEY]) settings = FB.storage.normalizeSettings(changes[FB.storage.SETTINGS_KEY].newValue);
   });
+
+  // Real Esc key stops a running flow (synthetic {key: escape} is ignored).
+  window.addEventListener('keydown', (e) => {
+    if (currentRun && e.isTrusted && e.key === 'Escape') {
+      currentRun.cancelled = true;
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }, true);
 
   const lookup = (shortcut) => byShortcut.get(shortcut)?.text ?? null;
 
@@ -55,11 +69,31 @@
         if (!formValues) return;
       }
       const { actions, errors } = FB.compile(snippet.text, { lookup, formValues });
-      if (errors.length) FB.ui.toast(`FastBlaze:\n${errors.join('\n')}`, 'error');
-      await FB.dom.execute(actions);
+      if (errors.length) FB.ui.toast(`FastBlaze — template errors:\n${errors.join('\n')}`, 'error');
+
+      const run = { cancelled: false };
+      const isFlow = actions.length > 1 && actions.some((a) => a.type !== 'text');
+      const panel = isFlow ? FB.ui.progress(snippet.name || snippet.shortcut, () => { run.cancelled = true; }) : null;
+      currentRun = run;
+      try {
+        await FB.dom.execute(actions, {
+          ...settings,
+          run,
+          onStep: (i, n, a) => panel && panel.update(i, n, FB.describeAction(a)),
+        });
+        if (isFlow) FB.ui.toast(`✓ ${snippet.name || snippet.shortcut} — ${actions.length} steps`, '', 1800);
+      } finally {
+        currentRun = null;
+        if (panel) panel.close();
+      }
     } catch (err) {
-      console.error('[FastBlaze]', err);
-      FB.ui.toast(`FastBlaze: ${err.message}`, 'error');
+      if (err.name === 'Cancelled') {
+        FB.ui.toast('FastBlaze: stopped');
+      } else {
+        console.error('[FastBlaze]', err);
+        if (err.element) FB.ui.flash(err.element, 2500, 'error');
+        FB.ui.toast(`FastBlaze — ${snippet.name || snippet.shortcut}\n${err.message}`, 'error', 8000);
+      }
     } finally {
       busy = false;
     }

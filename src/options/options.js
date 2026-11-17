@@ -113,7 +113,7 @@
     const lookup = (sc) => allSnippets().find((x) => x.s.shortcut === sc)?.s.text ?? null;
     const { actions, errors } = FB.compile(hit.s.text, { lookup });
     $('preview-list').replaceChildren(...actions.map((a) => {
-      const detail = a.type === 'text' ? a.value : a.type === 'click' ? a.selector : a.type === 'wait' ? `${a.ms} ms` : a.key;
+      const detail = a.type === 'text' ? a.value : FB.describeAction(a).replace(/^\w+ /, '');
       return el('li', {}, [el('span', { className: `kind ${a.type}`, textContent: a.type }), el('span', { className: 'mono', textContent: detail })]);
     }));
     $('preview-errors').hidden = !errors.length;
@@ -220,6 +220,24 @@
       persist();
     }
   });
+
+  // ---------- settings ----------
+  async function openSettings() {
+    const s = await FB.storage.loadSettings();
+    $('s-highlight').checked = s.highlight;
+    $('s-step').value = s.stepDelay;
+    $('s-timeout').value = s.timeout / 1000;
+    $('settings').showModal();
+  }
+  function saveSettingsFromForm() {
+    FB.storage.saveSettings({
+      highlight: $('s-highlight').checked,
+      stepDelay: Number($('s-step').value),
+      timeout: Number($('s-timeout').value) * 1000,
+    });
+  }
+  $('open-settings').addEventListener('click', openSettings);
+  for (const id of ['s-highlight', 's-step', 's-timeout']) $(id).addEventListener('change', saveSettingsFromForm);
 
   FB.storage.load().then((d) => {
     data = d;

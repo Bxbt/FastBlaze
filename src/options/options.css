@@ -41,6 +41,17 @@ textarea { resize: vertical; font-size: 12.5px; line-height: 1.5; }
 #preview-list .kind.text { color: #16a34a; }
 #preview-list .kind.wait, #preview-list .kind.key { color: #9333ea; }
 
+dialog#settings {
+  border: 1px solid var(--border); border-radius: 12px; padding: 0;
+  background: var(--bg); color: var(--fg); width: min(420px, calc(100vw - 32px));
+}
+dialog#settings::backdrop { background: rgba(15, 23, 42, .45); }
+.settings-form { padding: 18px; }
+.settings-form h3 { margin: 0 0 14px; }
+label.check { display: flex; align-items: center; gap: 8px; color: var(--fg); font-size: 13px; }
+label.check input { width: auto; margin: 0; }
+.top img { border-radius: 6px; }
+
 .help { margin-top: 20px; }
 .help summary { cursor: pointer; font-weight: 600; }
 .help table { border-collapse: collapse; margin-top: 8px; }

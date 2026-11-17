@@ -11,7 +11,8 @@
   }
 
   // Thai ID quick generator
-  const newId = () => { $('tid').textContent = FB.generateThaiId(); };
+  // Test IDs always start with 8 (same as the /id snippet).
+  const newId = () => { $('tid').textContent = FB.generateThaiId({ prefix: '8' }); };
   $('tid-new').addEventListener('click', newId);
   $('tid-copy').addEventListener('click', async () => {
     await navigator.clipboard.writeText($('tid').textContent);

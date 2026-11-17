@@ -1,6 +1,6 @@
 body { width: 340px; padding: 12px; }
 header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-header strong { font-size: 15px; color: var(--accent); }
+header strong { font-size: 15px; color: var(--accent); display: flex; align-items: center; gap: 6px; }
 .thaiid {
   display: flex; align-items: center; gap: 6px;
   background: var(--panel); border: 1px solid var(--border); border-radius: 10px;

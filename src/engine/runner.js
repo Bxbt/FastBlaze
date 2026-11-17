@@ -92,7 +92,39 @@
       if (emit) ctx.actions.push({ type: 'key', key });
       return '';
     },
+    // {clear} empties the focused field; {clear: selector=...} finds, focuses and empties a field.
+    clear(a, ctx, emit) {
+      if (emit) ctx.actions.push({ type: 'clear', selector: a.selector ?? a._[0] ?? null });
+      return '';
+    },
+    // Native <select>: {select: selector=...; value=x | text=Label | index=2}
+    select(a, ctx, emit) {
+      const selector = a.selector;
+      if (!selector) throw new Error('select needs selector=');
+      const action = { type: 'select', selector };
+      if (a.index != null) action.index = Number(a.index);
+      else if (a.text != null) action.text = a.text;
+      else if (a.value != null) action.value = a.value;
+      else throw new Error('select needs value=, text= or index=');
+      if (emit) ctx.actions.push(action);
+      return '';
+    },
   };
+
+  function describeAction(a) {
+    switch (a.type) {
+      case 'text': return `type "${a.value.length > 40 ? `${a.value.slice(0, 40)}…` : a.value}"`;
+      case 'click': return `click ${a.selector}`;
+      case 'wait': return `wait ${a.ms} ms`;
+      case 'key': return `key ${a.key}`;
+      case 'clear': return `clear ${a.selector || 'focused field'}`;
+      case 'select': {
+        const what = a.index != null ? `#${a.index}` : `"${a.text ?? a.value}"`;
+        return `select ${what} in ${a.selector}`;
+      }
+      default: return a.type;
+    }
+  }
 
   // Resolve {...} inside argument values, e.g. default={=a+1}.
   function resolveArgs(args, ctx) {
@@ -184,6 +216,7 @@
     return ctx.fields.filter((f) => !seen.has(f.name) && seen.add(f.name));
   }
 
+  FB.describeAction = describeAction;
   FB.compile = compile;
   FB.collectFields = collectFields;
   FB.COMMANDS = COMMANDS;
