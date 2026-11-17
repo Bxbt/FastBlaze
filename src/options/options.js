@@ -1625,6 +1625,7 @@
 
   FB.storage.load().then((d) => {
     data = d;
-    select(null); // start on the welcome / try-out page
+    const m = location.hash.match(/snippet=([\w-]+)/); // opened after a recording
+    select(m && findSnippet(m[1]) ? m[1] : null);
   });
 })();

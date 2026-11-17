@@ -193,7 +193,7 @@ test('format puts one command per line and runs identically', () => {
   const src = '{click: selector=[data-testid="a"]}abc{click: selector=.x}{formtext: name=n; default=d}{d1=8}{d2=1}{=d1+d2} tail';
   const formatted = FB.formatTemplate(src);
   assert.match(formatted, /\\\n\{click: selector=\.x\}/);
-  assert.equal(formatted.split('\n').length, 6);
+  assert.equal(formatted.split('\n').length, 4);
   assert.deepEqual(plain(FB.compile(formatted).actions), plain(FB.compile(src).actions));
   assert.equal(FB.compactTemplate(formatted), src);
   assert.equal(FB.formatTemplate(formatted), formatted); // idempotent

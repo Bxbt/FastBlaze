@@ -60,6 +60,12 @@
 
   const run = (snippet) => sendAndClose({ type: 'fastblaze:run', id: snippet.id });
   $('pick').addEventListener('click', () => sendAndClose({ type: 'fastblaze:pick' }));
+  $('record').addEventListener('click', async () => {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const res = await chrome.runtime.sendMessage({ type: 'fastblaze:rec-start', tabId: tab && tab.id }).catch((err) => ({ ok: false, error: err.message }));
+    if (res && res.ok) window.close();
+    else setStatus(`Cannot record here: ${(res && res.error) || 'unknown error'}`, true);
+  });
 
   $('q').addEventListener('input', render);
   $('q').addEventListener('keydown', (e) => {
