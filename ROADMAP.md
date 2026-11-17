@@ -1,6 +1,6 @@
 # FastBlaze Roadmap
 
-สถานะ: v0.5 — Phase 1 + 2 + 3 + 5 เสร็จ (flow เสถียร, settings, logo, element picker, theme)
+สถานะ: v0.6 — Phase 1–5 เสร็จ (flow เสถียร, settings, logo, element picker, theme)
 ลำดับด้านล่างเรียงตาม "คุ้มค่า / แรงที่ใช้" — ทำทีละ phase, แต่ละ phase ใช้งานได้จริงเมื่อจบ
 
 ---
@@ -41,10 +41,10 @@
 
 ## Phase 4 — Record mode (~2–3 วัน)
 
-- [ ] กดอัด → ทำงานบนเว็บตามปกติ → กดหยุด → ได้ snippet ทั้ง flow
-- [ ] จับ click, การพิมพ์ (รวมเป็น text ก้อนเดียวต่อช่อง), เลือก dropdown, key Enter/Tab
-- [ ] แปลงค่าที่พิมพ์ให้เป็นคำสั่งได้ (เช่น เลขบัตร → `{thaiid}`, ชื่อ → `{formtext}`)
-- [ ] ใช้ selector engine เดียวกับ Phase 3
+- [x] กดอัด → ทำงานบนเว็บตามปกติ → กดหยุด → ได้ snippet ทั้ง flow (popup หรือหน้า Manage)
+- [x] จับ click, การพิมพ์ (รวมเป็น text ก้อนเดียวต่อช่อง, password ไม่เก็บ), เลือก dropdown, key Enter/Escape, ข้ามหน้าได้
+- [x] แปลงค่าที่พิมพ์ให้เป็นคำสั่ง (เลขบัตร → `{thaiid}`, เบอร์ → `{thaiphone}`, อีเมล → `{email}`)
+- [x] ใช้ selector engine เดียวกับ Phase 3 (รวม Shadow DOM `|>`)
 
 ## Phase 5 — Test data generators (~0.5 วัน)
 

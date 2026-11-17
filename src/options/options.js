@@ -1001,6 +1001,11 @@
 
   const COMMANDS = [
     {
+      id: 'record', group: 'Automation', frequent: true, icon: 'record', title: 'Record from website',
+      desc: 'Record clicks and typing on a page into steps', keywords: 'record macro capture flow',
+      special: 'record', fields: [], build: () => '',
+    },
+    {
       id: 'click', group: 'Automation', frequent: true, icon: 'mouse', title: 'Click element',
       desc: 'Click an element on the page, then type into it', keywords: 'button selector testid tap pick',
       fields: [
@@ -1247,7 +1252,7 @@
         el('span', { className: 'cmd-icon' }, [FB.icon(c.icon)]),
         el('span', {}, [el('strong', { textContent: c.title }), el('span', { className: 'desc', textContent: c.desc })]),
       ]);
-      b.addEventListener('click', () => openCommand(c));
+      b.addEventListener('click', () => (c.special === 'record' ? openRecordPanel() : openCommand(c)));
       return b;
     };
     const nodes = [];
@@ -1318,6 +1323,78 @@
     pickWaiter = null; // the background brings this tab back to the front
     done((p.candidates && p.candidates[0]) || null);
   });
+
+  // ---------- Record from website (Manage page) ----------
+  const LAST_RECORDING_KEY = 'fastblaze.lastRecording';
+  let recWaiter = null; // { since, done(template) }
+
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local' || !changes[LAST_RECORDING_KEY] || !recWaiter) return;
+    const r = changes[LAST_RECORDING_KEY].newValue;
+    if (!r || r.at < recWaiter.since) return;
+    const { done } = recWaiter;
+    recWaiter = null;
+    done(r);
+  });
+
+  function cancelRecording() {
+    recWaiter = null;
+    if (chrome.runtime && chrome.runtime.sendMessage) chrome.runtime.sendMessage({ type: 'fastblaze:rec-cancel' }).catch(() => {});
+  }
+
+  function openRecordPanel() {
+    const panel = $('cmd-config');
+    for (const n of document.querySelectorAll('.commands > .cmd-search, .commands > .cmd-list, .commands > .cmd-footer')) n.hidden = true;
+    panel.hidden = false;
+    let waiting = !!recWaiter;
+
+    const back = el('button', { type: 'button', className: 'icon-only ghost-btn', title: 'Back to commands' }, [FB.icon('back')]);
+    back.addEventListener('click', () => { if (waiting) cancelRecording(); showList(); });
+    const body = el('div', { className: 'cfg-body' });
+    panel.replaceChildren(el('div', { className: 'cfg-head' }, [back, FB.icon('record'), el('strong', { textContent: 'Record from website' })]), body);
+
+    function render() {
+      const start = el('button', { type: 'button', className: 'pick-btn' }, [FB.icon('record'), waiting ? 'Recording…' : 'Start recording']);
+      start.disabled = waiting;
+      start.addEventListener('click', startRec);
+      const nodes = [
+        el('div', { className: 'cfg-title', textContent: 'Record steps' }),
+        el('p', { className: 'cfg-desc', textContent: 'Switches to your last tab and records clicks, typing, dropdown choices and Enter. Before your first click you can switch to any other tab. Passwords are never stored.' }),
+        start,
+      ];
+      if (waiting) {
+        const stop = el('button', { type: 'button', className: 'link-btn', textContent: 'Cancel recording' });
+        stop.addEventListener('click', () => { cancelRecording(); waiting = false; render(); });
+        nodes.push(el('p', { className: 'cfg-desc rec-wait' }, ['Use the page, then press ', el('b', { textContent: 'Stop & save' }), ' in the bar at the top of the page. The steps are inserted here at the cursor. ', stop]));
+      }
+      body.replaceChildren(el('section', { className: 'cfg-section' }, nodes));
+    }
+
+    async function startRec() {
+      const since = Date.now();
+      recWaiter = {
+        since,
+        done: (r) => {
+          waiting = false;
+          showList();
+          insertAtCursor(r.template);
+        },
+      };
+      waiting = true;
+      render();
+      if (!chrome.runtime || !chrome.runtime.sendMessage || !chrome.tabs) return; // test harness: wait for storage
+      const me = await chrome.tabs.getCurrent();
+      const res = await chrome.runtime.sendMessage({ type: 'fastblaze:rec-start', fromTabId: me && me.id }).catch((err) => ({ ok: false, error: err.message }));
+      if (!res || !res.ok) {
+        recWaiter = null;
+        waiting = false;
+        render();
+        await FB.dialog.alert({ title: 'Cannot start recording', message: [(res && res.error) || 'Unknown error', '. Open the web page in another tab, then try again.'] });
+      }
+    }
+
+    render();
+  }
 
   // ---------- edit an existing command chip ----------
   const DATE_PRESETS = ['DDMMBBBB', 'DD/MM/BBBB', 'DD/MM/YYYY', 'YYYY-MM-DD', 'D MMMM BBBB', 'D MMM BB'];

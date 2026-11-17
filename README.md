@@ -20,6 +20,12 @@ After editing code: click ↻ on the extension card, then reload the page.
   and the field is restored to its value before the shortcut.
 - Popup (`Alt+Shift+F`): search + run a snippet on the current page,
   generate/copy a Thai test ID.
+- **Record** (popup button, or **Record from website** in the Manage page commands):
+  clicks, typing, native dropdown choices and Enter/Escape become steps; recording
+  survives page loads. Password values are never stored (a `{formtext}` is used).
+  **Stop & save** turns typed Thai IDs / phones / emails into generators (toggle
+  "Test data"). From the popup it creates a snippet in the *Recorded* folder and
+  opens it; from the Manage page the steps are inserted at the cursor.
 - **Pick** (popup button or `Alt+Shift+P`): hover an element (yellow box), click it
   to get ranked selectors (stable / ok / fragile). The best command is copied and
   available as **Insert picked** in the editor. `↑`/`↓` = parent/child, `Esc` = cancel.
