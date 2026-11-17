@@ -136,11 +136,15 @@
       const isFlow = actions.length > 1 && actions.some((a) => a.type !== 'text');
       const panel = isFlow ? FB.ui.progress(snippet.name || snippet.shortcut, () => { run.cancelled = true; }) : null;
       currentRun = run;
+      if (FB.sound) FB.sound.trigger(settings.soundVolume);
       try {
         await FB.dom.execute(actions, {
           ...settings,
           run,
-          onStep: (i, n, a) => panel && panel.update(i, n, FB.describeAction(a)),
+          onStep: (i, n, a) => {
+            if (panel) panel.update(i, n, FB.describeAction(a));
+            if (FB.sound && i > 0 && a.type === 'click') FB.sound.step(settings.soundVolume);
+          },
         });
         if (isFlow) FB.ui.toast(`Done: ${snippet.name || snippet.shortcut} (${actions.length} steps)`, '', 1800);
       } finally {

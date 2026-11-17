@@ -489,17 +489,27 @@
     $('s-highlight').checked = s.highlight;
     $('s-step').value = s.stepDelay;
     $('s-timeout').value = s.timeout / 1000;
+    $('s-volume').value = s.soundVolume;
+    showVolume();
     $('settings').showModal();
+  }
+  function showVolume() {
+    const v = Number($('s-volume').value);
+    $('s-volume-value').textContent = v ? `${v}%` : 'off';
   }
   function saveSettingsFromForm() {
     FB.storage.saveSettings({
       highlight: $('s-highlight').checked,
       stepDelay: Number($('s-step').value),
       timeout: Number($('s-timeout').value) * 1000,
+      soundVolume: Number($('s-volume').value),
     });
   }
   $('open-settings').addEventListener('click', openSettings);
-  for (const id of ['s-highlight', 's-step', 's-timeout']) $(id).addEventListener('change', saveSettingsFromForm);
+  for (const id of ['s-highlight', 's-step', 's-timeout', 's-volume']) $(id).addEventListener('change', saveSettingsFromForm);
+  $('s-volume').addEventListener('input', showVolume);
+  $('s-volume').addEventListener('change', () => FB.sound.trigger($('s-volume').value));
+  $('s-volume-test').addEventListener('click', () => FB.sound.trigger($('s-volume').value));
 
   FB.storage.load().then((d) => {
     data = d;

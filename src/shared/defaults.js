@@ -7,6 +7,7 @@
     highlight: true, // yellow flash on clicked elements
     stepDelay: 60, // ms pause after each click / key
     timeout: 5000, // ms to wait for an element to appear
+    soundVolume: 40, // 0-100 key-click sound when a snippet runs (0 = off)
   };
 
   FB.DEFAULT_DATA = {

@@ -27,6 +27,14 @@
       <label>Pause after each click / key (ms)<input type="number" id="s-step" min="0" max="5000" step="10"></label>
       <label>Wait for element up to (seconds)<input type="number" id="s-timeout" min="0.5" max="60" step="0.5"></label>
       <p class="muted">Saved automatically. Applies to new runs on all tabs.</p>
+      <h4>Sound</h4>
+      <label>Key-click volume <span id="s-volume-value" class="muted"></span>
+        <div class="row volume-row">
+          <input type="range" id="s-volume" min="0" max="100" step="5">
+          <button type="button" id="s-volume-test">Test</button>
+        </div>
+      </label>
+      <p class="muted">Short keyboard clicks when a snippet starts, and a soft tick on each automation click. 0 = off.</p>
       <h4>Data</h4>
       <p class="muted">Import merges into existing folders (same folder + shortcut is replaced). Export saves every folder as JSON.</p>
       <div class="row data-actions">
@@ -123,6 +131,7 @@
   <!-- Content scripts power the try-out boxes (scoped to [data-tryout]). -->
   <script src="../content/dom.js"></script>
   <script src="../content/ui.js"></script>
+  <script src="../content/sound.js"></script>
   <script src="../content/content.js"></script>
   <script src="options.js"></script>
 </body>

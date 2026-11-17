@@ -93,6 +93,7 @@
       highlight: s.highlight ?? d.highlight,
       stepDelay: num(s.stepDelay, d.stepDelay, 0, 5000),
       timeout: num(s.timeout, d.timeout, 500, 60000),
+      soundVolume: num(s.soundVolume, d.soundVolume, 0, 100),
     };
   }
 

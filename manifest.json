@@ -46,6 +46,7 @@
         "src/shared/storage.js",
         "src/content/dom.js",
         "src/content/ui.js",
+        "src/content/sound.js",
         "src/content/selector.js",
         "src/content/picker.js",
         "src/content/content.js"

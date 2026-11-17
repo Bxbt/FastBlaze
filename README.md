@@ -29,7 +29,8 @@ After editing code: click ↻ on the extension card, then reload the page.
   (new snippet, rename, sort, disable/enable, delete) and snippets (duplicate,
   move to folder, rename, delete). Disabled folders are listed separately and
   their shortcuts stop expanding.
-- Settings: highlight on/off, pause per step, element timeout, Import / Export JSON.
+- Settings: highlight on/off, pause per step, element timeout, key-click sound volume
+  (snippet start + each automation click; 0 = off), Import / Export JSON.
   Appearance switch (System / Light / Dark) in the header.
 - Running a flow shows a progress panel (bottom-left). **Esc** or **Stop** cancels.
   Failures name the step (`Step 14/26: click …`) and flash the element red.

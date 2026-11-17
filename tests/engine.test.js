@@ -153,12 +153,14 @@ test('describeAction labels every action type', () => {
 test('settings are normalized and clamped', () => {
   require('../src/shared/defaults.js');
   require('../src/shared/storage.js');
-  assert.deepEqual(FB.storage.normalizeSettings(), { highlight: true, stepDelay: 60, timeout: 5000 });
+  assert.deepEqual(FB.storage.normalizeSettings(), { highlight: true, stepDelay: 60, timeout: 5000, soundVolume: 40 });
   assert.deepEqual(
     FB.storage.normalizeSettings({ highlight: false, stepDelay: -5, timeout: 'abc' }),
-    { highlight: false, stepDelay: 0, timeout: 5000 },
+    { highlight: false, stepDelay: 0, timeout: 5000, soundVolume: 40 },
   );
   assert.equal(FB.storage.normalizeSettings({ timeout: 999999 }).timeout, 60000);
+  assert.equal(FB.storage.normalizeSettings({ soundVolume: 150 }).soundVolume, 100);
+  assert.equal(FB.storage.normalizeSettings({ soundVolume: 0 }).soundVolume, 0);
 });
 
 test('formmenu options and thaiid command', () => {
