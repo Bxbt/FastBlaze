@@ -59,6 +59,27 @@
     el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: text ? 'insertText' : 'deleteContentBackward', data: text || null }));
   }
 
+  /** Value + caret of a text field (null for contenteditable). */
+  function snapshot(el) {
+    return isTextField(el) ? { value: el.value, caret: caret(el) } : null;
+  }
+
+  /** Put a text field back to a snapshot, firing input events so frameworks see it. */
+  function restoreValue(el, snap) {
+    if (el.value !== snap.value) {
+      el.focus({ preventScroll: true });
+      el.select();
+      const ok = snap.value ? document.execCommand('insertText', false, snap.value) : document.execCommand('delete');
+      if (!ok || el.value !== snap.value) {
+        setNativeValue(el, snap.value);
+        el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'deleteContentBackward' }));
+      }
+    }
+    if (snap.caret) {
+      try { el.setSelectionRange(snap.caret.start, snap.caret.end); } catch { /* not supported */ }
+    }
+  }
+
   function deleteBeforeCaret(el, count) {
     if (isTextField(el)) {
       const c = caret(el);
@@ -309,7 +330,7 @@
   }
 
   FB.dom = {
-    isEditable, deepActiveElement, textBeforeCaret, deleteBeforeCaret,
+    isEditable, deepActiveElement, textBeforeCaret, deleteBeforeCaret, snapshot, restoreValue,
     insertText, typeText, findElement, waitForElement, simulateClick, pressKey,
     clearField, selectOption, saveSelection, restoreSelection, execute, sleep, Cancelled,
   };

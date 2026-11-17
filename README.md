@@ -15,7 +15,9 @@ After editing code: click ↻ on the extension card, then reload the page.
 
 ## Use
 
-- Type a shortcut (e.g. `/lead`) in any field → expands.
+- Type a shortcut (e.g. `/lead`) in any field → expands. Works even in fields that
+  reject `/` or letters (digit-only, masked, `type=number`): keystrokes are tracked
+  and the field is restored to its value before the shortcut.
 - Popup (`Alt+Shift+F`): search + run a snippet on the current page,
   generate/copy a Thai test ID.
 - Options page: edit snippets, live preview of the action list, import/export,

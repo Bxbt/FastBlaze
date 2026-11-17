@@ -23,6 +23,9 @@
   <label>First name</label><input data-testid="input-first-name">
   <label>Last name</label><input data-testid="input-last-name">
   <label>ID card</label><input data-testid="input-id-card-number">
+  <label>Phone — digits only (strips other chars on input)</label><input data-testid="input-digits" inputmode="numeric">
+  <label>Zipcode — mask (blocks non-digit keys)</label><input data-testid="input-mask" maxlength="5">
+  <label>Amount — type=number</label><input data-testid="input-number" type="number">
   <label>Sub-district</label>
   <div class="select">
     <button type="button" data-testid="select-sub-district">— choose —</button>
@@ -47,6 +50,18 @@
     const show = () => { mirror.textContent = JSON.stringify(state, null, 1); };
     document.querySelectorAll('input, textarea').forEach((el) => {
       el.addEventListener('input', () => { state[el.dataset.testid] = el.value; show(); });
+    });
+    // Field that drops anything that is not a digit (common React pattern).
+    const digits = document.querySelector('[data-testid="input-digits"]');
+    digits.addEventListener('input', () => {
+      const clean = digits.value.replace(/\D/g, '');
+      if (clean !== digits.value) digits.value = clean;
+      state['input-digits'] = clean; show();
+    });
+    // Mask library style: block the key before it reaches the field.
+    const mask = document.querySelector('[data-testid="input-mask"]');
+    mask.addEventListener('keydown', (e) => {
+      if (e.key.length === 1 && !/\d/.test(e.key)) e.preventDefault();
     });
     document.querySelectorAll('select').forEach((el) => {
       el.addEventListener('change', () => { state[el.dataset.testid] = el.value; show(); });

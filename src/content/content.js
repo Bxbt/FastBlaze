@@ -37,22 +37,78 @@
 
   const lookup = (shortcut) => byShortcut.get(shortcut)?.text ?? null;
 
-  function matchShortcut(el) {
-    const before = FB.dom.textBeforeCaret(el);
-    return before ? shortcuts.find((s) => before.endsWith(s)) : undefined;
+  // ---- Shortcut detection -------------------------------------------------
+  // We track the keys the user actually pressed instead of reading the field value,
+  // because many fields reject "/" or letters (digit-only, masked, type=number).
+  // Each typed key stores a snapshot of the field *before* that key, so when a
+  // shortcut completes we can put the field back exactly as it was.
+  const MAX_BUFFER = 40;
+  const RESET_KEYS = new Set([
+    'Enter', 'Tab', 'Escape', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown',
+    'Home', 'End', 'PageUp', 'PageDown', 'Delete',
+  ]);
+  let typed = []; // [{ ch, snap }]
+  let typedEl = null;
+
+  const resetTyped = () => { typed = []; typedEl = null; };
+
+  window.addEventListener('keydown', (e) => {
+    if (busy || !e.isTrusted || e.isComposing) return;
+    const el = FB.dom.deepActiveElement();
+    if (!FB.dom.isEditable(el)) return resetTyped();
+    if (el !== typedEl) { typed = []; typedEl = el; }
+
+    if (e.key === 'Backspace') { typed.pop(); return; }
+    if (RESET_KEYS.has(e.key) || e.ctrlKey || e.metaKey) return resetTyped();
+    if (e.key.length !== 1) return; // Shift, CapsLock, F-keys...
+
+    typed.push({ ch: e.key, snap: FB.dom.snapshot(el) });
+    if (typed.length > MAX_BUFFER) typed.shift();
+    // Let the page/framework finish handling this key first.
+    setTimeout(() => checkShortcut(el), 0);
+  }, true);
+
+  window.addEventListener('mousedown', resetTyped, true);
+  window.addEventListener('focusin', (e) => { if (e.target !== typedEl) resetTyped(); }, true);
+
+  let lastTrigger = 0;
+
+  function trigger(sc, el) {
+    lastTrigger = Date.now();
+    runSnippet(byShortcut.get(sc), el);
   }
 
+  function checkShortcut(el) {
+    if (busy || el !== typedEl || el !== FB.dom.deepActiveElement()) return;
+    const text = typed.map((t) => t.ch).join('');
+    const sc = shortcuts.find((s) => text.endsWith(s));
+    if (!sc) return;
+    const start = typed[typed.length - sc.length];
+    resetTyped();
+
+    const before = FB.dom.textBeforeCaret(el);
+    if (before != null && before.endsWith(sc)) {
+      FB.dom.deleteBeforeCaret(el, sc.length); // normal field: shortcut text is there
+    } else if (start.snap) {
+      FB.dom.restoreValue(el, start.snap); // field filtered some/all characters
+    }
+    trigger(sc, el);
+  }
+
+  // Fallback for text that arrives without key events (autofill, IME, voice, automation tools).
   document.addEventListener('input', (e) => {
-    if (busy || !e.isTrusted || e.isComposing) return;
+    if (busy || e.isComposing) return;
     if (e.inputType && !e.inputType.startsWith('insert')) return;
     const el = FB.dom.deepActiveElement();
-    if (!FB.dom.isEditable(el) || !matchShortcut(el)) return;
-    // Let the framework finish handling this keystroke before we edit the field.
+    if (!FB.dom.isEditable(el)) return;
     setTimeout(() => {
-      const sc = matchShortcut(el);
-      if (!sc || busy) return;
+      if (busy || Date.now() - lastTrigger < 300) return; // keystroke path already handled it
+      const before = FB.dom.textBeforeCaret(el);
+      const sc = before && shortcuts.find((s) => before.endsWith(s));
+      if (!sc) return;
+      resetTyped();
       FB.dom.deleteBeforeCaret(el, sc.length);
-      runSnippet(byShortcut.get(sc), el);
+      trigger(sc, el);
     }, 0);
   }, true);
 
