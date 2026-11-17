@@ -57,7 +57,7 @@
     const box = FB.ui.el('div', { className: 'pick-box' });
     const tip = FB.ui.el('div', { className: 'pick-tip' });
     const bar = FB.ui.el('div', { className: 'pick-bar' });
-    bar.innerHTML = '🎯 Click an element &nbsp;·&nbsp; <kbd>↑</kbd> parent <kbd>↓</kbd> child &nbsp;·&nbsp; <kbd>Esc</kbd> cancel';
+    bar.innerHTML = 'Click an element &nbsp;·&nbsp; <kbd>↑</kbd> parent <kbd>↓</kbd> child &nbsp;·&nbsp; <kbd>Esc</kbd> cancel';
     box.hidden = tip.hidden = true;
     root.append(box, tip, bar);
     session = { host, box, tip, current: null, trail: [] };
@@ -155,7 +155,7 @@
       btn.addEventListener('click', async () => {
         await navigator.clipboard.writeText(commands[i]);
         chrome.storage.local.set({ [LAST_PICK_KEY]: { command: commands[i], commands, url: location.href, at: Date.now() } });
-        btn.textContent = 'Copied ✓';
+        btn.textContent = 'Copied';
         setTimeout(() => { btn.textContent = 'Copy'; }, 1200);
       });
       const row = E('div', { className: 'cand' }, [
@@ -173,16 +173,16 @@
       return row;
     });
 
-    const again = E('button', { type: 'button', textContent: '🎯 Pick another' });
+    const again = E('button', { type: 'button', textContent: 'Pick another' });
     again.addEventListener('click', () => { closeResult(); start(); });
     const close = E('button', { type: 'button', textContent: 'Close' });
     close.addEventListener('click', closeResult);
 
     const notes = [];
-    if (copied) notes.push(E('p', { className: 'copied', textContent: '✓ Best command copied — also available as "Insert picked" in the editor.' }));
+    if (copied) notes.push(E('p', { className: 'copied', textContent: 'Best command copied — also available as "Insert picked" in the editor.' }));
     if (!cands.length) notes.push(E('p', { className: 'warn', textContent: 'No reliable selector found for this element.' }));
     else if (cands[0].stability === 'fragile') {
-      notes.push(E('p', { className: 'warn', textContent: '⚠ Only fragile selectors (layout/classes). Ask devs for a data-testid on this element.' }));
+      notes.push(E('p', { className: 'warn', textContent: 'Only fragile selectors (layout/classes). Ask devs for a data-testid on this element.' }));
     }
 
     root.appendChild(E('div', { className: 'result' }, [

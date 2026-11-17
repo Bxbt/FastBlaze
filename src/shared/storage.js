@@ -13,6 +13,7 @@
       folders: folders.map((f) => ({
         id: f.id || uid(),
         name: String(f.name || 'Untitled'),
+        ...(f.disabled ? { disabled: true } : {}),
         snippets: (Array.isArray(f.snippets) ? f.snippets : []).map((s) => ({
           id: s.id || uid(),
           name: String(s.name ?? ''),
@@ -32,8 +33,11 @@
     await chrome.storage.local.set({ [KEY]: normalize(data) });
   }
 
-  function flatten(data) {
-    return normalize(data).folders.flatMap((f) => f.snippets.map((s) => ({ ...s, folderId: f.id, folder: f.name })));
+  /** All snippets with their folder info. Disabled folders are skipped unless includeDisabled. */
+  function flatten(data, includeDisabled) {
+    return normalize(data).folders
+      .filter((f) => includeDisabled || !f.disabled)
+      .flatMap((f) => f.snippets.map((s) => ({ ...s, folderId: f.id, folder: f.name })));
   }
 
   /** Merge an imported file (v7 JSON export). Same folder name + same shortcut = replace. */
@@ -68,6 +72,7 @@
         name: f.name,
         info: '',
         app: 'TEXT',
+        ...(f.disabled ? { disabled: true } : {}),
         snippets: f.snippets.map((s) => ({
           name: s.name, shortcut: s.shortcut, type: 'text', text: s.text, html: escapeHtml(s.text),
         })),

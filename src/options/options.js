@@ -35,41 +35,250 @@
   }
 
   // ---------- sidebar ----------
+  // Collapsed folders are a per-viewer UI preference, kept in localStorage.
+  const COLLAPSE_KEY = 'fastblaze.collapsed';
+  let collapsed = new Set();
+  try { collapsed = new Set(JSON.parse(localStorage.getItem(COLLAPSE_KEY) || '[]')); } catch { /* ignore */ }
+
+  function setCollapsed(id, on) {
+    if (on) collapsed.add(id);
+    else collapsed.delete(id);
+    try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify([...collapsed])); } catch { /* ignore */ }
+  }
+
+  let dragId = null;
+
+  function clearDropMarks() {
+    document.querySelectorAll('.drop-before, .drop-after, .drop-into')
+      .forEach((n) => n.classList.remove('drop-before', 'drop-after', 'drop-into'));
+  }
+
+  /** Move a snippet into `folder`, before snippet `beforeId` (null = end). */
+  function moveSnippet(id, folder, beforeId) {
+    const hit = findSnippet(id);
+    if (!hit || beforeId === id) return;
+    hit.f.snippets.splice(hit.f.snippets.indexOf(hit.s), 1);
+    const idx = beforeId ? folder.snippets.findIndex((s) => s.id === beforeId) : -1;
+    if (idx < 0) folder.snippets.push(hit.s);
+    else folder.snippets.splice(idx, 0, hit.s);
+    setCollapsed(folder.id, false);
+    persist();
+    if (selectedId) select(selectedId); // refresh folder dropdown too
+    else renderTree();
+  }
+
+  function snippetRow(s, f, dups) {
+    const isDup = dups.has(s.shortcut);
+    const row = el('div', {
+      className: `snip${s.id === selectedId ? ' selected' : ''}${isDup ? ' dup' : ''}`,
+      title: isDup ? 'Duplicate shortcut' : 'Drag to reorder',
+      draggable: true,
+    }, [
+      el('span', { className: 'grip', textContent: '\u22EE\u22EE', ariaHidden: 'true' }),
+      el('span', { className: 'name', textContent: s.name || '(untitled)' }),
+      ...(s.shortcut ? [el('span', { className: 'chip', textContent: s.shortcut })] : []),
+    ]);
+    row.addEventListener('click', () => select(s.id));
+    row.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      openMenu(snippetMenu(s, f), e.clientX, e.clientY);
+    });
+    row.addEventListener('dragstart', (e) => {
+      dragId = s.id;
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', s.id);
+      requestAnimationFrame(() => row.classList.add('dragging'));
+    });
+    row.addEventListener('dragend', () => {
+      row.classList.remove('dragging');
+      clearDropMarks();
+      dragId = null;
+    });
+    row.addEventListener('dragover', (e) => {
+      if (!dragId) return;
+      e.preventDefault();
+      const r = row.getBoundingClientRect();
+      const after = e.clientY > r.top + r.height / 2;
+      clearDropMarks();
+      row.classList.add(after ? 'drop-after' : 'drop-before');
+    });
+    row.addEventListener('drop', (e) => {
+      if (!dragId) return;
+      e.preventDefault();
+      const after = row.classList.contains('drop-after');
+      const i = f.snippets.indexOf(s);
+      const beforeId = after ? (f.snippets[i + 1]?.id ?? null) : s.id;
+      const id = dragId;
+      clearDropMarks();
+      moveSnippet(id, f, beforeId);
+    });
+    return row;
+  }
+
+  const DISABLED_OPEN = '__disabled_open__'; // stored in `collapsed` set: disabled section expanded
+
   function renderTree() {
     const q = $('search').value.trim().toLowerCase();
     const dups = duplicateShortcuts();
-    const tree = $('tree');
-    tree.replaceChildren(...data.folders.map((f) => {
-      const items = f.snippets.filter((s) => !q || `${s.name} ${s.shortcut} ${s.text}`.toLowerCase().includes(q));
-      const rename = el('button', { title: 'Rename folder', textContent: '✎', type: 'button' });
-      rename.addEventListener('click', () => renameFolder(f));
-      const del = el('button', { title: 'Delete folder', textContent: '×', type: 'button' });
-      del.addEventListener('click', () => deleteFolder(f));
-      const head = el('div', { className: 'folder-head' }, [
-        el('span', { textContent: f.name }),
-        el('span', { className: 'count muted', textContent: `(${f.snippets.length})` }),
-        el('span', { className: 'spacer' }), rename, del,
+    const enabled = data.folders.filter((f) => !f.disabled);
+    const disabled = data.folders.filter((f) => f.disabled);
+    const nodes = enabled.map((f) => folderNode(f, q, dups));
+    if (disabled.length) {
+      const open = collapsed.has(DISABLED_OPEN) || !!q;
+      const head = el('button', { type: 'button', className: `disabled-head${open ? ' open' : ''}` }, [
+        el('span', { textContent: '⊘' }),
+        el('span', { className: 'folder-name', textContent: `Disabled folders (${disabled.length})` }),
+        el('span', { className: 'spacer' }),
+        el('span', { className: 'caret', textContent: '›' }),
       ]);
-      return el('div', { className: 'folder' }, [head, ...items.map((s) => {
-        const row = el('div', {
-          className: `snip${s.id === selectedId ? ' selected' : ''}${dups.has(s.shortcut) ? ' dup' : ''}`,
-          title: dups.has(s.shortcut) ? 'Duplicate shortcut' : '',
-        }, [
-          el('span', { className: 'name', textContent: s.name || '(untitled)' }),
-          el('span', { className: 'chip', textContent: s.shortcut }),
-        ]);
-        row.addEventListener('click', () => select(s.id));
-        return row;
-      })]);
-    }));
+      head.addEventListener('click', () => {
+        setCollapsed(DISABLED_OPEN, !collapsed.has(DISABLED_OPEN));
+        renderTree();
+      });
+      const body = el('div', { className: 'disabled-body' }, disabled.map((f) => folderNode(f, q, dups)));
+      body.hidden = !open;
+      nodes.push(el('div', { className: 'disabled-section' }, [head, body]));
+    }
+    $('tree').replaceChildren(...nodes);
+  }
+
+  function folderNode(f, q, dups) {
+    {
+      const items = f.snippets.filter((s) => !q || `${s.name} ${s.shortcut} ${s.text}`.toLowerCase().includes(q));
+      const isCollapsed = collapsed.has(f.id) && !q; // searching shows every match
+      const more = el('button', { title: 'Folder actions', textContent: '⋯', type: 'button', className: 'more' });
+      more.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const r = more.getBoundingClientRect();
+        openMenu(folderMenu(f), r.left, r.bottom + 4);
+      });
+      const head = el('div', { className: 'folder-head', title: isCollapsed ? 'Expand' : 'Collapse' }, [
+        el('span', { className: 'caret', textContent: '▾' }),
+        el('span', { className: 'folder-name', textContent: f.name }),
+        el('span', { className: 'count muted', textContent: `(${f.snippets.length})` }),
+        el('span', { className: 'spacer' }), more,
+      ]);
+      head.addEventListener('click', () => {
+        setCollapsed(f.id, !collapsed.has(f.id));
+        renderTree();
+      });
+      head.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        openMenu(folderMenu(f), e.clientX, e.clientY);
+      });
+      // Drop on the folder header = move to the end of that folder.
+      head.addEventListener('dragover', (e) => {
+        if (!dragId) return;
+        e.preventDefault();
+        clearDropMarks();
+        head.classList.add('drop-into');
+      });
+      head.addEventListener('drop', (e) => {
+        if (!dragId) return;
+        e.preventDefault();
+        const id = dragId;
+        clearDropMarks();
+        moveSnippet(id, f, null);
+      });
+      const body = el('div', { className: 'folder-body' }, items.map((s) => snippetRow(s, f, dups)));
+      body.hidden = isCollapsed;
+      return el('div', { className: `folder${isCollapsed ? ' collapsed' : ''}${f.disabled ? ' is-disabled' : ''}` }, [head, body]);
+    }
+  }
+
+  // ---------- context menus ----------
+  let menuEl = null;
+
+  function closeMenu() {
+    if (menuEl) menuEl.remove();
+    menuEl = null;
+  }
+
+  function buildMenu(items) {
+    const m = el('div', { className: 'menu', role: 'menu' });
+    for (const it of items) {
+      if (it === '-') { m.append(el('div', { className: 'menu-sep' })); continue; }
+      const row = el('button', {
+        type: 'button', role: 'menuitem', disabled: !!it.disabled,
+        className: `menu-item${it.danger ? ' danger' : ''}${it.checked ? ' checked' : ''}`,
+      }, [
+        el('span', { className: 'menu-icon' }, it.icon ? [FB.icon(it.icon)] : []),
+        el('span', { className: 'menu-label', textContent: it.label }),
+        ...(it.sub ? [el('span', { className: 'menu-arrow', textContent: '›' })] : []),
+      ]);
+      if (it.sub) {
+        const sub = buildMenu(it.sub);
+        sub.classList.add('submenu');
+        m.append(el('div', { className: 'menu-sub-wrap' }, [row, sub]));
+        continue;
+      }
+      row.addEventListener('click', () => { closeMenu(); it.action(); });
+      m.append(row);
+    }
+    return m;
+  }
+
+  function openMenu(items, x, y) {
+    closeMenu();
+    menuEl = buildMenu(items);
+    document.body.append(menuEl);
+    const r = menuEl.getBoundingClientRect();
+    menuEl.style.left = `${Math.max(8, Math.min(x, innerWidth - r.width - 8))}px`;
+    menuEl.style.top = `${Math.max(8, Math.min(y, innerHeight - r.height - 8))}px`;
+    if (x + r.width * 2 > innerWidth) menuEl.classList.add('flip');
+  }
+
+  document.addEventListener('mousedown', (e) => { if (menuEl && !menuEl.contains(e.target)) closeMenu(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenu(); });
+  window.addEventListener('blur', closeMenu);
+  window.addEventListener('resize', closeMenu);
+  $('tree').addEventListener('scroll', closeMenu);
+
+  function folderMenu(f) {
+    const sortBy = (cmp) => () => { f.snippets.sort(cmp); persist(); renderTree(); };
+    const byName = (a, b) => (a.name || '').localeCompare(b.name || '', 'th');
+    return [
+      { icon: 'plus', label: 'New snippet', action: () => newSnippet(f) },
+      { icon: 'pencil', label: 'Rename…', action: () => renameFolder(f) },
+      {
+        icon: 'sort', label: 'Sort by', sub: [
+          { label: 'Name (A → Z)', action: sortBy(byName) },
+          { label: 'Name (Z → A)', action: sortBy((a, b) => byName(b, a)) },
+          { label: 'Shortcut', action: sortBy((a, b) => (a.shortcut || '￿').localeCompare(b.shortcut || '￿')) },
+        ],
+      },
+      '-',
+      f.disabled
+        ? { icon: 'check', label: 'Enable folder', action: () => setFolderDisabled(f, false) }
+        : { icon: 'ban', label: 'Disable folder', action: () => setFolderDisabled(f, true) },
+      '-',
+      { icon: 'trash', label: 'Delete folder…', danger: true, action: () => deleteFolder(f) },
+    ];
+  }
+
+  function snippetMenu(s, f) {
+    const others = data.folders.filter((x) => x !== f);
+    return [
+      { icon: 'copy', label: 'Duplicate snippet', action: () => duplicateSnippet(s) },
+      {
+        icon: 'move', label: 'Move to folder', disabled: !others.length,
+        sub: others.map((x) => ({ label: x.name + (x.disabled ? ' (disabled)' : ''), action: () => moveSnippet(s.id, x, null) })),
+      },
+      { icon: 'pencil', label: 'Rename…', action: () => renameSnippet(s) },
+      '-',
+      { icon: 'trash', label: 'Delete snippet…', danger: true, action: () => deleteSnippet(s) },
+    ];
   }
 
   // ---------- editor ----------
   function select(id) {
     selectedId = id;
     const hit = findSnippet(id);
+    if (hit && collapsed.has(hit.f.id)) setCollapsed(hit.f.id, false);
+    if (hit && hit.f.disabled) setCollapsed(DISABLED_OPEN, true);
     $('editor').hidden = !hit;
     $('empty').hidden = !!hit;
+    if (!hit) renderWelcome();
     if (hit) {
       $('f-name').value = hit.s.name;
       $('f-shortcut').value = hit.s.shortcut;
@@ -81,6 +290,17 @@
       renderPreview();
     }
     renderTree();
+  }
+
+  function renderWelcome() {
+    const examples = data.folders.filter((f) => !f.disabled)
+      .flatMap((f) => f.snippets).filter((s) => s.shortcut).slice(0, 3);
+    const parts = [];
+    examples.forEach((s, i) => {
+      if (i) parts.push(i === examples.length - 1 ? ' หรือ ' : ', ');
+      parts.push(el('span', { className: 'chip', textContent: s.shortcut, title: s.name }));
+    });
+    $('welcome-examples').replaceChildren(...(parts.length ? ['เช่น ', ...parts] : []));
   }
 
   function updateDupWarning() {
@@ -121,10 +341,10 @@
   }
 
   // ---------- actions ----------
-  function newSnippet() {
+  function newSnippet(target) {
     if (!data.folders.length) data.folders.push({ id: FB.storage.uid(), name: 'My snippets', snippets: [] });
     const current = findSnippet(selectedId);
-    const folder = current ? current.f : data.folders[0];
+    const folder = target || (current ? current.f : data.folders.find((f) => !f.disabled) || data.folders[0]);
     const s = { id: FB.storage.uid(), name: 'New snippet', shortcut: '', text: '' };
     folder.snippets.push(s);
     persist();
@@ -156,16 +376,34 @@
     select(selectedId);
   }
 
-  function deleteSnippet() {
-    const hit = findSnippet(selectedId);
-    if (!hit || !confirm(`Delete "${hit.s.name || hit.s.shortcut}"?`)) return;
-    hit.f.snippets = hit.f.snippets.filter((s) => s !== hit.s);
+  function setFolderDisabled(f, on) {
+    if (on) f.disabled = true;
+    else delete f.disabled;
+    if (on) setCollapsed(DISABLED_OPEN, true);
     persist();
-    select(null);
+    renderTree();
   }
 
-  function duplicateSnippet() {
-    const hit = findSnippet(selectedId);
+  function renameSnippet(s) {
+    const name = prompt('Rename snippet', s.name);
+    if (name == null) return;
+    s.name = name.trim();
+    persist();
+    if (selectedId === s.id) select(s.id);
+    else renderTree();
+  }
+
+  function deleteSnippet(s) {
+    const hit = findSnippet(s ? s.id : selectedId);
+    if (!hit || !confirm(`Delete "${hit.s.name || hit.s.shortcut}"?`)) return;
+    hit.f.snippets = hit.f.snippets.filter((x) => x !== hit.s);
+    persist();
+    if (selectedId === hit.s.id) select(null);
+    else renderTree();
+  }
+
+  function duplicateSnippet(s) {
+    const hit = findSnippet(s ? s.id : selectedId);
     if (!hit) return;
     const copy = { ...hit.s, id: FB.storage.uid(), name: `${hit.s.name} (copy)`, shortcut: '' };
     hit.f.snippets.splice(hit.f.snippets.indexOf(hit.s) + 1, 0, copy);
@@ -202,10 +440,12 @@
   });
   $('editor').addEventListener('submit', (e) => e.preventDefault());
   $('search').addEventListener('input', renderTree);
-  $('new-snippet').addEventListener('click', newSnippet);
+  $('new-snippet').addEventListener('click', () => newSnippet());
+  $('welcome-new').addEventListener('click', () => newSnippet());
   $('new-folder').addEventListener('click', newFolder);
-  $('delete').addEventListener('click', deleteSnippet);
-  $('duplicate').addEventListener('click', duplicateSnippet);
+  $('delete').addEventListener('click', () => deleteSnippet());
+  $('duplicate').addEventListener('click', () => duplicateSnippet());
+  $('home').addEventListener('click', (e) => { e.preventDefault(); select(null); });
   $('refresh-preview').addEventListener('click', renderPreview);
   $('import').addEventListener('click', () => $('import-file').click());
   $('import-file').addEventListener('change', (e) => {
@@ -228,7 +468,7 @@
   function showPick(p) {
     lastPick = p || null;
     $('insert-pick').disabled = !lastPick;
-    $('insert-pick').title = lastPick ? lastPick.command : 'Use 🎯 Pick in the popup (Alt+Shift+P) on a page first';
+    $('insert-pick').title = lastPick ? lastPick.command : 'Use Pick in the popup (Alt+Shift+P) on a page first';
   }
   chrome.storage.local.get(LAST_PICK_KEY).then((got) => showPick(got[LAST_PICK_KEY]));
   chrome.storage.onChanged.addListener((changes, area) => {
@@ -263,7 +503,6 @@
 
   FB.storage.load().then((d) => {
     data = d;
-    const first = data.folders[0]?.snippets[0];
-    select(first ? first.id : null);
+    select(null); // start on the welcome / try-out page
   });
 })();

@@ -23,16 +23,17 @@
 - [ ] ปุ่ม "Format" — แสดง 1 คำสั่งต่อบรรทัด (ขึ้นบรรทัดเฉพาะที่แสดง ไม่กระทบตอนรัน)
 - [ ] Sidebar แทรกคำสั่ง: click / formtext / formmenu / thaiid / random / wait / key / import
 - [ ] Autocomplete `{import: /` → รายชื่อ shortcut
-- [ ] ช่อง "Try it out" ในหน้า Options (พิมพ์ shortcut ทดลองได้เลย)
+- [x] ช่อง "Try it out" ในหน้า Options (หน้า Welcome + ใต้ Preview)
+- [x] Sidebar: พับ/ขยายโฟลเดอร์, ลากสลับตำแหน่ง/ย้ายโฟลเดอร์, เมนูคลิกขวา, ปิดใช้โฟลเดอร์, เรียงลำดับ
 - [ ] กด step ใน Preview → กระโดดไปตำแหน่งใน template
 
 ## Phase 3 — Element picker (~1 วัน) ⭐ คุ้มที่สุดสำหรับ automation
 
-- [x] ปุ่ม "🎯 Pick" ใน popup / `Alt+Shift+P` → hover บนเว็บ = กรอบเหลือง, คลิก = ได้ selector (↑/↓ เลือก parent/child, Esc ยกเลิก)
+- [x] ปุ่ม "Pick" ใน popup / `Alt+Shift+P` → hover บนเว็บ = กรอบเหลือง, คลิก = ได้ selector (↑/↓ เลือก parent/child, Esc ยกเลิก)
 - [x] ลำดับการสร้าง selector (ตรวจทุกตัวว่าชี้ element เดียวกันจริง):
       `data-testid` → `id` → `name` / `aria-label` / `placeholder` → ข้อความ (`{click: text=...}`) → anchored → class / path
 - [x] ป้าย stable / ok / fragile + เตือนเมื่อมีแต่ selector เปราะ
-- [x] Copy อัตโนมัติ + ปุ่ม "🎯 Insert picked" ใน editor
+- [x] Copy อัตโนมัติ + ปุ่ม "Insert picked" ใน editor
 - [x] `{click: text=...}` คลิกตามข้อความที่เห็น (เหมาะกับตัวเลือกใน dropdown)
 - [x] สีหน้า Manage/popup ตาม CI ของ logo + สลับ Appearance (System / Light / Dark)
 

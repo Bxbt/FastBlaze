@@ -8,7 +8,7 @@ common snippet export format (v7 JSON: folders → snippets), so existing snippe
 
 1. `chrome://extensions` → enable **Developer mode**
 2. **Load unpacked** → pick this folder
-3. Options page opens → **Import JSON** → choose your snippet export (.json)
+3. Options page opens → **Settings → Import JSON** → choose your snippet export (.json)
 4. Reload open tabs (or run a snippet from the popup; it injects itself)
 
 After editing code: click ↻ on the extension card, then reload the page.
@@ -20,12 +20,17 @@ After editing code: click ↻ on the extension card, then reload the page.
   and the field is restored to its value before the shortcut.
 - Popup (`Alt+Shift+F`): search + run a snippet on the current page,
   generate/copy a Thai test ID.
-- **🎯 Pick** (popup button or `Alt+Shift+P`): hover an element (yellow box), click it
+- **Pick** (popup button or `Alt+Shift+P`): hover an element (yellow box), click it
   to get ranked selectors (stable / ok / fragile). The best command is copied and
-  available as **🎯 Insert picked** in the editor. `↑`/`↓` = parent/child, `Esc` = cancel.
-- Options page: edit snippets, live preview of the action list, import/export,
-  ⚙ Settings (highlight on/off, pause per step, element timeout),
-  Appearance switch (System / Light / Dark).
+  available as **Insert picked** in the editor. `↑`/`↓` = parent/child, `Esc` = cancel.
+- Options page: welcome page with a try-out box, edit snippets with live preview
+  and a per-snippet try-out box. Sidebar: collapsible folders, drag snippets to
+  reorder or move between folders, right-click (or ⋯) menus for folders
+  (new snippet, rename, sort, disable/enable, delete) and snippets (duplicate,
+  move to folder, rename, delete). Disabled folders are listed separately and
+  their shortcuts stop expanding.
+- Settings: highlight on/off, pause per step, element timeout, Import / Export JSON.
+  Appearance switch (System / Light / Dark) in the header.
 - Running a flow shows a progress panel (bottom-left). **Esc** or **Stop** cancels.
   Failures name the step (`Step 14/26: click …`) and flash the element red.
 
@@ -50,7 +55,7 @@ After editing code: click ↻ on the extension card, then reload the page.
 
 ```
 npm test                     # engine unit tests (Node 18+)
-python3 -m http.server 8765  # then open /test-page/?harness
+python3 test-page/serve.py   # http://localhost:8765/test-page/?harness
 ```
 
 `test-page/?harness` loads the content scripts with a `chrome.*` mock, so the
