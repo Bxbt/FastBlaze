@@ -59,6 +59,12 @@ After editing code: click ↻ on the extension card, then reload the page.
 - Running a flow shows a progress panel (bottom-left). **Esc** or **Stop** cancels.
   Failures name the step (`Step 14/26: click …`) and flash the element red.
 
+## Selector tips
+
+- Dates or other changing text inside a selector break the next day. Match the stable part instead:
+  `button[aria-label^="Today"]` (`^=` starts with, `*=` contains).
+- Prefer `data-testid` / `id` / `name`; avoid `div:nth-of-type(2) > label`-style paths.
+
 ## Template syntax
 
 | Syntax | Meaning |
@@ -76,6 +82,7 @@ After editing code: click ↻ on the extension card, then reload the page.
 | `{import: /id}` | Insert another snippet |
 | `{click: selector=CSS}` | Wait ≤5s for visible element, click; following text types into focus |
 | `{click: text=Label}` | Click element whose visible text equals Label (`selector=` narrows the search) |
+| `{click: selector=.overflow-auto > div; pick=random}` | Click one of **all** matching options: `pick=random`, `next` (a different option each run, cycling), `first`, `last`, or a number. `exclude=— เลือก —\|ไม่ระบุ` skips options; disabled ones are skipped. Pick finds the list selector when you select one option |
 | `{click: …; maxdelay=3s}` | Wait up to this long for the element (default: Settings) |
 | (all clicks) | Wait until the element is **really clickable**: visible, enabled, not covered, not moving; re-found if the page re-renders it. `force=yes` skips the checks |
 | `{waitfor: selector=.result}` / `{waitfor: selector=.spinner; state=gone}` / `{waitfor: text=บันทึกสำเร็จ}` | Wait until something appears / disappears (no click) |

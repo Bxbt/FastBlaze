@@ -98,6 +98,15 @@
       const action = text != null ? { type: 'click', selector, text } : { type: 'click', selector };
       if (a.maxdelay != null && a.maxdelay !== '') action.timeout = parseDelay(a.maxdelay);
       if (isYes(a.force, false)) action.force = true; // skip the "really clickable" checks
+      // pick= chooses one of ALL matching elements (dropdown options):
+      // random | next (cycles each run) | first | last | N (1-based). exclude=A|B skips by text.
+      if (a.pick != null && a.pick !== '') {
+        const pick = String(a.pick).trim().toLowerCase();
+        if (!/^(random|next|first|last|[1-9]\d*)$/.test(pick)) throw new Error('pick must be random, next, first, last or a number');
+        if (!selector) throw new Error('pick needs selector= (all options of the list)');
+        action.pick = pick;
+      }
+      if (a.exclude) action.exclude = String(a.exclude).split('|').map((x) => x.trim()).filter(Boolean);
       if (emit) ctx.actions.push(action);
       return '';
     },
@@ -157,7 +166,9 @@
   function describeAction(a) {
     switch (a.type) {
       case 'text': return `type "${a.value.length > 40 ? `${a.value.slice(0, 40)}…` : a.value}"`;
-      case 'click': return a.text != null ? `click "${a.text}"${a.selector ? ` in ${a.selector}` : ''}` : `click ${a.selector}`;
+      case 'click':
+        if (a.pick) return `click ${a.pick === 'next' ? 'next' : a.pick === 'random' ? 'a random' : a.pick} option of ${a.selector}`;
+        return a.text != null ? `click "${a.text}"${a.selector ? ` in ${a.selector}` : ''}` : `click ${a.selector}`;
       case 'wait': return `wait ${a.ms} ms`;
       case 'idle': return 'wait until the page is idle';
       case 'waitfor': {

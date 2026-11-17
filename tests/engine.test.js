@@ -232,3 +232,16 @@ test('smart waits: waitfor, wait idle, click force', () => {
   assert.match(FB.compile('{waitfor}').errors[0], /selector= or text=/);
   assert.equal(FB.tokenizeTemplate('{waitfor: selector=#x}')[0].kind, 'action');
 });
+
+test('click pick= / exclude= choose among all matching options', () => {
+  const r = FB.compile('{click: selector=.menu > li; pick=random; exclude=— เลือก —|ไม่ระบุ}{click: selector=.menu > li; pick=next}{click: selector=.menu > li; pick=3}');
+  assert.deepEqual(r.errors, []);
+  assert.deepEqual(plain(r.actions), [
+    { type: 'click', selector: '.menu > li', pick: 'random', exclude: ['— เลือก —', 'ไม่ระบุ'] },
+    { type: 'click', selector: '.menu > li', pick: 'next' },
+    { type: 'click', selector: '.menu > li', pick: '3' },
+  ]);
+  assert.equal(FB.describeAction(r.actions[0]), 'click a random option of .menu > li');
+  assert.match(FB.compile('{click: selector=.x; pick=sometimes}').errors[0], /pick must be/);
+  assert.match(FB.compile('{click: text=A; pick=random}').errors[0], /needs selector/);
+});

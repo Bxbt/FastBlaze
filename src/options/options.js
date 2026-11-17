@@ -538,7 +538,11 @@
     const P = (k, v) => (v == null || v === '' ? null : [k, String(v)]);
     let parts;
     switch (n.name) {
-      case 'click': parts = [a.text != null ? P('text', a.text) : P('selector', a.selector ?? a._[0]), P('max', a.maxdelay)]; break;
+      case 'click':
+        parts = a.pick
+          ? [P('options', a.selector), ['pick', a.pick === 'next' ? 'next each run' : a.pick], P('max', a.maxdelay)]
+          : [a.text != null ? P('text', a.text) : P('selector', a.selector ?? a._[0]), P('max', a.maxdelay)];
+        break;
       case 'wait': {
         const v = a.delay ?? a._[0] ?? '500ms';
         parts = /^idle$/i.test(String(v).trim()) ? [['wait', 'until idle']] : [P('delay', `+${v}`)];
@@ -1014,19 +1018,36 @@
       id: 'click', group: 'Automation', frequent: true, icon: 'mouse', title: 'Click element',
       desc: 'Click an element on the page, then type into it', keywords: 'button selector testid tap pick',
       fields: [
+        { key: 'pick', label: 'Which one', type: 'select', value: 'one',
+          options: [['one', 'This element'], ['random', 'A random option from the list'], ['next', 'The next option on every run'],
+            ['first', 'The first option'], ['last', 'The last option'], ['nth', 'Option number\u2026']],
+          desc: (v) => (v.pick === 'one'
+            ? 'For dropdown lists you can choose a random option, or go through the options one by one on each run.'
+            : 'Open the dropdown first (click its trigger), then this step picks from all options of the list. Select one option on the web page and the list is found for you.'),
+          onChange: (v) => { if (v.pick !== 'one' && v._list) { v.by = 'selector'; v.value = v._list; } } },
+        { key: 'nth', label: 'Option number', type: 'number', value: '1', required: true, show: (v) => v.pick === 'nth', desc: '1 = first option of the list.' },
         { key: 'value', type: 'element', label: 'Element', required: true,
-          desc: 'The element to click. Select it on a web page, or type a CSS selector.' },
+          desc: (v) => (v.pick === 'one'
+            ? 'The element to click. Select it on a web page, or type a CSS selector.'
+            : 'All options of the list. Select any one option on the web page.') },
+        { key: 'exclude', label: 'Skip options', advanced: true, show: (v) => v.pick !== 'one',
+          desc: 'Option texts to never choose, separated by | (e.g. — เลือก —|ไม่ระบุ). Disabled options are always skipped.' },
         { key: 'maxdelay', label: 'Max delay', short: 'Time', type: 'number', row: 'md',
           desc: () => `The element is clicked as soon as it becomes clickable. If it does not appear within this time, the snippet stops and shows an error. Leave empty to use Settings (${Math.round(currentSettings.timeout / 100) / 10}s).` },
         { key: 'unit', label: 'Unit', type: 'select', options: [['s', 'Seconds'], ['ms', 'Milliseconds']], value: 's', row: 'md' },
-        { key: 'by', label: 'Find the element by', type: 'select', advanced: true,
+        { key: 'by', label: 'Find the element by', type: 'select', advanced: true, show: (v) => v.pick === 'one',
           options: [['selector', 'CSS selector'], ['text', 'Visible text']], value: 'selector',
           desc: 'Visible text works well for dropdown options that have no test id.' },
-        { key: 'within', label: 'Only inside (CSS selector)', mono: true, advanced: true, show: (v) => v.by === 'text',
+        { key: 'within', label: 'Only inside (CSS selector)', mono: true, advanced: true, show: (v) => v.by === 'text' && v.pick === 'one',
           desc: 'Optional. Limits the text search to this part of the page.' },
       ],
       build: (v) => {
         const delay = v.maxdelay !== '' && v.maxdelay != null ? `; maxdelay=${Number(v.maxdelay)}${v.unit}` : '';
+        if (v.pick && v.pick !== 'one') {
+          const pick = v.pick === 'nth' ? String(Math.max(1, Number(v.nth) || 1)) : v.pick;
+          const exclude = v.exclude ? `; exclude=${tplArg(v.exclude)}` : '';
+          return `{click: selector=${tplArg(v.value)}; pick=${pick}${exclude}${delay}}`;
+        }
         return v.by === 'text'
           ? `{click: text=${tplArg(v.value)}${v.within ? `; selector=${tplArg(v.within)}` : ''}${delay}}`
           : `{click: selector=${tplArg(v.value)}${delay}}`;
@@ -1356,7 +1377,7 @@
     if (!p || p.at < pickWaiter.since) return;
     const { done } = pickWaiter;
     pickWaiter = null; // the background brings this tab back to the front
-    done((p.candidates && p.candidates[0]) || null);
+    done((p.candidates && p.candidates[0]) || null, p);
   });
 
   // ---------- Record from website (Manage page) ----------
@@ -1447,6 +1468,8 @@
       return {
         by: a.text != null ? 'text' : 'selector', value: a.text ?? a.selector ?? a._[0] ?? '',
         within: a.text != null ? (a.selector ?? '') : '', maxdelay: d ? d.amount : '', unit: d ? d.unit : 's',
+        pick: !a.pick ? 'one' : /^\d+$/.test(a.pick) ? 'nth' : a.pick, nth: /^\d+$/.test(a.pick || '') ? a.pick : '1',
+        exclude: a.exclude ?? '',
       };
     },
     select: (a) => {
@@ -1571,7 +1594,7 @@
         if (!opts || !opts.length) input.append(el('option', { value: '', textContent: '(nothing to choose)' }));
         input.value = vals[f.key];
         if (input.value !== vals[f.key]) vals[f.key] = input.value;
-        input.addEventListener('change', () => { vals[f.key] = input.value; render(); });
+        input.addEventListener('change', () => { vals[f.key] = input.value; if (f.onChange) f.onChange(vals); render(); });
       } else {
         input = el('input', { type: val(f.type, vals) || 'text', value: vals[f.key] ?? '', className: f.mono ? 'mono' : '', spellcheck: false });
         input.addEventListener('input', () => { vals[f.key] = input.value; updateOut(); });
@@ -1585,9 +1608,12 @@
       const pickBtn = el('button', { type: 'button', className: 'pick-btn' }, [FB.icon('mouse'), waiting ? 'Waiting for your click…' : 'Select from website']);
       pickBtn.disabled = waiting;
       pickBtn.addEventListener('click', () => {
-        pickFromWebsite((cand) => {
+        pickFromWebsite((cand, pick) => {
           waiting = false;
-          if (cand) {
+          vals._list = pick && pick.list ? pick.list.selector : null;
+          vals._listCount = pick && pick.list ? pick.list.count : 0;
+          if (vals.pick && vals.pick !== 'one' && vals._list) { vals.by = 'selector'; vals.value = vals._list; }
+          else if (cand) {
             if (cand.text != null && !cand.selector) { vals.by = 'text'; vals.value = cand.text; }
             else { vals.by = 'selector'; vals.value = cand.selector; }
           }
@@ -1612,7 +1638,12 @@
         stop.addEventListener('click', () => { cancelPick(); waiting = false; render(); });
         nodes.push(el('p', { className: 'cfg-desc' }, ['Switch to any tab and click the element there. ', stop]));
       }
-      nodes.push(el('div', { className: 'cfg-status' }, [el('span', { textContent: `${isText ? 'Text' : 'Selector'}: ` }), current, el('span', { className: 'spacer' }), edit]), input);
+      const listMode = vals.pick && vals.pick !== 'one';
+      const what = listMode ? `Options${vals._listCount && vals.value === vals._list ? ` (${vals._listCount})` : ''}: ` : `${isText ? 'Text' : 'Selector'}: `;
+      nodes.push(el('div', { className: 'cfg-status' }, [el('span', { textContent: what }), current, el('span', { className: 'spacer' }), edit]), input);
+      if (listMode && !vals._list && vals.value && !/[>\s]/.test(vals.value)) {
+        nodes.push(el('p', { className: 'cfg-desc warn-soft', textContent: 'This looks like one element. Select an option on the web page so the whole list is used.' }));
+      }
       return el('section', { className: 'cfg-section' }, nodes);
     }
 
