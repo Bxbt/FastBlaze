@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "FastBlaze",
+  "version": "0.1.0",
+  "description": "Text snippets, Thai test ID generator and click automation for filling test forms.",
+  "permissions": ["storage", "activeTab", "scripting"],
+  "background": { "service_worker": "src/background.js" },
+  "action": {
+    "default_popup": "src/popup/popup.html",
+    "default_title": "FastBlaze"
+  },
+  "options_page": "src/options/options.html",
+  "commands": {
+    "_execute_action": {
+      "suggested_key": { "default": "Alt+Shift+F", "mac": "Alt+Shift+F" },
+      "description": "Open FastBlaze"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "all_frames": true,
+      "match_about_blank": true,
+      "run_at": "document_idle",
+      "js": [
+        "src/engine/expr.js",
+        "src/engine/parser.js",
+        "src/engine/thaiid.js",
+        "src/engine/runner.js",
+        "src/shared/defaults.js",
+        "src/shared/storage.js",
+        "src/content/dom.js",
+        "src/content/ui.js",
+        "src/content/content.js"
+      ]
+    }
+  ]
+}

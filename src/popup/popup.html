@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <title>FastBlaze</title>
+  <link rel="stylesheet" href="../shared/base.css">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <strong>FastBlaze</strong>
+    <button id="open-options" title="Manage snippets">Manage</button>
+  </header>
+
+  <section class="thaiid">
+    <span class="muted">Thai ID</span>
+    <code id="tid"></code>
+    <button id="tid-new" title="Generate new">↻</button>
+    <button id="tid-copy" class="primary">Copy</button>
+  </section>
+
+  <input id="q" type="search" placeholder="Search snippets… (Enter = run first)" autofocus>
+  <ul id="list"></ul>
+  <p id="status" class="muted"></p>
+
+  <script src="../engine/thaiid.js"></script>
+  <script src="../shared/defaults.js"></script>
+  <script src="../shared/storage.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
