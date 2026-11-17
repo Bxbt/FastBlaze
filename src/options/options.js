@@ -539,6 +539,10 @@
     let parts;
     switch (n.name) {
       case 'click':
+        if (a.list) {
+          const mode = a.pick ? (a.pick === 'next' ? 'next each run' : a.pick) : null;
+          return { icon: 'dropdown', parts: [['option', mode || (a.text ?? a.selector ?? '')], P('max', a.maxdelay)].filter(Boolean) };
+        }
         parts = a.pick
           ? [P('options', a.selector), ['pick', a.pick === 'next' ? 'next each run' : a.pick], P('max', a.maxdelay)]
           : [a.text != null ? P('text', a.text) : P('selector', a.selector ?? a._[0]), P('max', a.maxdelay)];
@@ -585,6 +589,7 @@
       x,
     ]);
     chip.dataset.src = raw;
+    if (t.node && t.node.type === 'cmd' && t.node.name === 'click' && t.node.args.list) chip.classList.add('blk-option');
     return chip;
   }
 
@@ -854,6 +859,46 @@
   ta.addEventListener('keyup', (e) => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) updateAutocomplete(); });
   window.addEventListener('resize', autoGrow);
   $('fmt-format').addEventListener('click', () => replaceTemplate(FB.formatTemplate(ta.value)));
+
+  // ---------- Dropdowns: switch every recorded dropdown option at once ----------
+  /** Rebuild a {click} command from parsed args (keeps every other argument). */
+  function clickFromArgs(a) {
+    const order = ['text', 'selector', 'list', 'pick', 'exclude', 'maxdelay', 'force'];
+    const keys = [...order.filter((k) => a[k] != null && a[k] !== ''), ...Object.keys(a).filter((k) => k !== '_' && !order.includes(k))];
+    return `{click: ${keys.map((k) => `${k}=${tplArg(a[k])}`).join('; ')}}`;
+  }
+
+  function setDropdownMode(mode) {
+    let changed = 0;
+    const out = FB.tokenizeTemplate(ta.value).map((t) => {
+      const n = t.node;
+      if (!n || n.type !== 'cmd' || n.name !== 'click' || !n.args.list) return t.text;
+      const a = { ...n.args };
+      delete a._;
+      if (mode === 'fixed') delete a.pick;
+      else a.pick = mode;
+      if (a.pick === 'next' || a.pick === 'random') {
+        if (!a.text && !a.selector) a.selector = a.list; // nothing to go back to: keep list as target
+      }
+      changed++;
+      return clickFromArgs(a);
+    }).join('');
+    if (!changed) {
+      FB.dialog.alert({ title: 'No dropdown options here', message: 'Dropdown options are found when you record (Record from website / popup Record). Clicks with a list= hint can be switched here.' });
+      return;
+    }
+    replaceTemplate(out);
+    $('saved').textContent = `${changed} dropdown option${changed === 1 ? '' : 's'}: ${mode === 'fixed' ? 'same as recorded' : mode === 'next' ? 'next each run' : 'random'}`;
+  }
+
+  $('fmt-dropdowns').addEventListener('click', () => {
+    const r = $('fmt-dropdowns').getBoundingClientRect();
+    openMenu([
+      { icon: 'dropdown', label: 'Same option as recorded', action: () => setDropdownMode('fixed') },
+      { icon: 'dice', label: 'Random option', action: () => setDropdownMode('random') },
+      { icon: 'refresh', label: 'Next option each run', action: () => setDropdownMode('next') },
+    ], r.left, r.bottom + 4);
+  });
   $('fmt-compact').addEventListener('click', () => replaceTemplate(FB.compactTemplate(ta.value)));
 
   let mode = 'edit';
@@ -1048,9 +1093,10 @@
           const exclude = v.exclude ? `; exclude=${tplArg(v.exclude)}` : '';
           return `{click: selector=${tplArg(v.value)}; pick=${pick}${exclude}${delay}}`;
         }
+        const hint = v._list ? `; list=${tplArg(v._list)}` : '';
         return v.by === 'text'
-          ? `{click: text=${tplArg(v.value)}${v.within ? `; selector=${tplArg(v.within)}` : ''}${delay}}`
-          : `{click: selector=${tplArg(v.value)}${delay}}`;
+          ? `{click: text=${tplArg(v.value)}${v.within ? `; selector=${tplArg(v.within)}` : ''}${hint}${delay}}`
+          : `{click: selector=${tplArg(v.value)}${hint}${delay}}`;
       },
     },
     {
@@ -1469,7 +1515,8 @@
         by: a.text != null ? 'text' : 'selector', value: a.text ?? a.selector ?? a._[0] ?? '',
         within: a.text != null ? (a.selector ?? '') : '', maxdelay: d ? d.amount : '', unit: d ? d.unit : 's',
         pick: !a.pick ? 'one' : /^\d+$/.test(a.pick) ? 'nth' : a.pick, nth: /^\d+$/.test(a.pick || '') ? a.pick : '1',
-        exclude: a.exclude ?? '',
+        exclude: a.exclude ?? '', _list: a.list ?? null,
+        ...(a.list && a.pick ? { by: 'selector', value: a.list } : {}),
       };
     },
     select: (a) => {

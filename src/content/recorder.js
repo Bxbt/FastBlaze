@@ -43,9 +43,12 @@
 
   // ---- step bookkeeping ----
   function push(step, label) {
-    // The user paused (page loading, animation): replay waits for the page to settle.
+    // The user waited while the page was busy loading (many DOM changes since the last
+    // step): replay waits for the page to settle. Plain reading pauses are ignored.
     const now = Date.now();
-    if (rec.lastStepAt && now - rec.lastStepAt > 3000 && rec.count > 0 && step.type !== 'type') {
+    const busyPage = rec.mutations > 40;
+    rec.mutations = 0;
+    if (rec.lastStepAt && now - rec.lastStepAt > 3000 && busyPage && rec.count > 0 && step.type !== 'type') {
       rec.count++;
       rec.local.push({ type: 'idle' });
       send({ type: 'fastblaze:rec-step', step: { type: 'idle' } });
@@ -55,6 +58,22 @@
     rec.local.push(step);
     send({ type: 'fastblaze:rec-step', step });
     updateBar(label);
+  }
+
+  const OPTION_ROLES = new Set(['option', 'menuitem', 'menuitemradio', 'menuitemcheckbox', 'treeitem']);
+
+  /** Is this a choice inside a dropdown / popup list (appeared after recording began)? */
+  function dropdownList(el) {
+    let popup = false;
+    for (let n = el; n && n !== document.body; n = parentAcross(n)) {
+      const role = n.getAttribute && n.getAttribute('role');
+      if (role && (OPTION_ROLES.has(role) || role === 'listbox' || role === 'menu')) popup = true;
+      if (rec.added.has(n)) popup = true;
+      if (popup) break;
+    }
+    if (!popup) return null;
+    const list = FB.selector.listSelector(el);
+    return list && list.count >= 2 ? list.selector : null;
   }
 
   function recordClick(el) {
@@ -67,6 +86,11 @@
     }
     rec.lastClickEl = el;
     rec.lastClickAt = Date.now();
+    const list = FB.dom.isEditable(el) ? null : dropdownList(el);
+    if (list) {
+      push({ type: 'click', ...ref, list }, `option ${ref.text ? `"${ref.text}"` : ref.selector}`);
+      return;
+    }
     push({ type: 'click', ...ref }, `click ${ref.selector || `"${ref.text}"`}`);
   }
 
@@ -162,7 +186,9 @@
     .count { font-weight: 700; }
     .last { color: #94a3b8; font: 11.5px ui-monospace, Menlo, monospace; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     label { display: flex; align-items: center; gap: 5px; color: #cbd5e1; font-size: 12px; cursor: pointer; white-space: nowrap; }
-    button { border: none; border-radius: 999px; padding: 5px 12px; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+    .count { white-space: nowrap; }
+    select { min-width: 118px; background: #1e293b; color: #e2e8f0; border: 1px solid #334155; border-radius: 6px; font-size: 12px; padding: 2px 4px; }
+    button { white-space: nowrap; border: none; border-radius: 999px; padding: 5px 12px; font-size: 12.5px; font-weight: 600; cursor: pointer; }
     .stop { background: #f97316; color: #fff; }
     .cancel { background: #334155; color: #e2e8f0; }
   `;
@@ -176,13 +202,19 @@
     const count = E('span', { className: 'count' });
     const last = E('span', { className: 'last' });
     const convert = E('input', { type: 'checkbox', checked: true });
+    const dropdowns = E('select', { title: 'How recorded dropdown options are replayed' }, [
+      E('option', { value: 'fixed', textContent: 'Same option' }),
+      E('option', { value: 'random', textContent: 'Random option' }),
+      E('option', { value: 'next', textContent: 'Next each run' }),
+    ]);
     const stop = E('button', { type: 'button', className: 'stop', textContent: 'Stop & save' });
     const cancel = E('button', { type: 'button', className: 'cancel', textContent: 'Cancel' });
-    stop.addEventListener('click', () => finish(true, convert.checked));
+    stop.addEventListener('click', () => finish(true, convert.checked, dropdowns.value));
     cancel.addEventListener('click', () => finish(false));
     root.appendChild(E('div', { className: 'rec' }, [
       E('span', { className: 'dot' }), E('span', { textContent: 'Recording' }), count, last,
       E('label', { title: 'Typed Thai IDs, phone numbers and emails become generators' }, [convert, 'Test data']),
+      E('label', { title: 'Dropdown options' }, ['Dropdowns', dropdowns]),
       stop, cancel,
     ]));
     rec.bar = { host, count, last };
@@ -200,9 +232,17 @@
   function begin(opts) {
     if (rec) return;
     opts = opts || {};
-    rec = { count: opts.count || 0, local: [], pending: null, initial: new WeakMap(), lastClickEl: null, lastClickAt: 0, lastStepAt: 0, labelClick: null, bar: null };
+    rec = { count: opts.count || 0, local: [], pending: null, initial: new WeakMap(), added: new WeakSet(), observer: null, mutations: 0, lastClickEl: null, lastClickAt: 0, lastStepAt: 0, labelClick: null, bar: null };
     for (const [type, fn] of LISTENERS) window.addEventListener(type, fn, true);
     window.addEventListener('pagehide', onPageHide);
+    rec.observer = new MutationObserver((records) => {
+      for (const r of records) {
+        if (r.target && r.target.nodeName === 'FASTBLAZE-UI') continue;
+        rec.mutations += r.addedNodes.length + r.removedNodes.length;
+        for (const n of r.addedNodes) if (n.nodeType === 1 && n.tagName !== 'FASTBLAZE-UI') rec.added.add(n);
+      }
+    });
+    rec.observer.observe(document.documentElement, { childList: true, subtree: true });
     showBar();
   }
 
@@ -211,11 +251,12 @@
     if (!rec) return;
     for (const [type, fn] of LISTENERS) window.removeEventListener(type, fn, true);
     window.removeEventListener('pagehide', onPageHide);
+    if (rec.observer) rec.observer.disconnect();
     if (rec.bar) rec.bar.host.remove();
     rec = null;
   }
 
-  async function finish(save, convert) {
+  async function finish(save, convert, dropdowns) {
     if (!rec) return;
     flushTyping();
     const steps = rec.local;
@@ -223,11 +264,11 @@
     end();
     if (!hasRuntime()) {
       // Test harness: build locally.
-      FB.recorder.lastTemplate = save && FB.recording ? FB.recording.buildRecordedTemplate(steps, { convert }) : null;
+      FB.recorder.lastTemplate = save && FB.recording ? FB.recording.buildRecordedTemplate(steps, { convert, dropdowns }) : null;
       FB.ui.toast(save ? `Recorded ${count} steps` : 'Recording cancelled');
       return;
     }
-    const res = await send({ type: 'fastblaze:rec-stop', save, convert, host: location.host, title: document.title });
+    const res = await send({ type: 'fastblaze:rec-stop', save, convert, dropdowns, host: location.host, title: document.title });
     if (save) FB.ui.toast(res && res.ok ? `Saved ${res.count} steps` : `Not saved: ${(res && res.error) || 'no steps'}`, res && res.ok ? '' : 'error');
     else FB.ui.toast('Recording cancelled');
   }

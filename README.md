@@ -23,7 +23,11 @@ After editing code: click ↻ on the extension card, then reload the page.
 - **Record** (popup button, or **Record from website** in the Manage page commands):
   clicks, typing, native dropdown choices and Enter/Escape become steps; recording
   survives page loads. Password values are never stored (a `{formtext}` is used).
-  Pauses longer than 3 s are recorded as `{wait: idle}`.
+  A pause while the page was busy loading is recorded as `{wait: idle}`.
+  Clicks on dropdown options are recognised (amber *option* chips) and keep the whole
+  list: `{click: text=iPhone 15; list=.overflow-auto > div}`. Choose **Dropdowns: Same
+  option / Random / Next each run** in the recording bar, or switch them all later with
+  the **Dropdowns** button in the editor toolbar.
   **Stop & save** turns typed Thai IDs / phones / emails into generators (toggle
   "Test data"). From the popup it creates a snippet in the *Recorded* folder and
   opens it; from the Manage page the steps are inserted at the cursor.
@@ -82,6 +86,7 @@ After editing code: click ↻ on the extension card, then reload the page.
 | `{import: /id}` | Insert another snippet |
 | `{click: selector=CSS}` | Wait ≤5s for visible element, click; following text types into focus |
 | `{click: text=Label}` | Click element whose visible text equals Label (`selector=` narrows the search) |
+| `{click: text=iPhone 15; list=.overflow-auto > div}` | A recorded dropdown option: clicks iPhone 15 inside that list; add `pick=random` / `next` to choose from the list instead |
 | `{click: selector=.overflow-auto > div; pick=random}` | Click one of **all** matching options: `pick=random`, `next` (a different option each run, cycling), `first`, `last`, or a number. `exclude=— เลือก —\|ไม่ระบุ` skips options; disabled ones are skipped. Pick finds the list selector when you select one option |
 | `{click: …; maxdelay=3s}` | Wait up to this long for the element (default: Settings) |
 | (all clicks) | Wait until the element is **really clickable**: visible, enabled, not covered, not moving; re-found if the page re-renders it. `force=yes` skips the checks |

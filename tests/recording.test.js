@@ -68,3 +68,10 @@ test('pauses become {wait: idle}', () => {
   assert.equal(build([{ type: 'click', selector: '#a' }, { type: 'idle' }, { type: 'click', selector: '#b' }]),
     '{click: selector=#a}{wait: idle}{click: selector=#b}');
 });
+
+test('dropdown options keep the list and can be recorded as random / next', () => {
+  const steps = [{ type: 'click', selector: '#model' }, { type: 'click', text: 'iPhone 15', list: '.opts > div' }];
+  assert.equal(build(steps), '{click: selector=#model}{click: text=iPhone 15; list=.opts > div}');
+  assert.equal(build(steps, { dropdowns: 'random' }), '{click: selector=#model}{click: text=iPhone 15; list=.opts > div; pick=random}');
+  assert.equal(build(steps, { dropdowns: 'next' }), '{click: selector=#model}{click: text=iPhone 15; list=.opts > div; pick=next}');
+});

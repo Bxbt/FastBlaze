@@ -245,3 +245,13 @@ test('click pick= / exclude= choose among all matching options', () => {
   assert.match(FB.compile('{click: selector=.x; pick=sometimes}').errors[0], /pick must be/);
   assert.match(FB.compile('{click: text=A; pick=random}').errors[0], /needs selector/);
 });
+
+test('list= marks dropdown options: scopes text, or is the list for pick', () => {
+  const r = FB.compile('{click: text=iPhone 15; list=.opts > div}{click: text=iPhone 15; list=.opts > div; pick=random}{click: selector=#o3; list=.opts > div; pick=next}');
+  assert.deepEqual(r.errors, []);
+  assert.deepEqual(plain(r.actions), [
+    { type: 'click', selector: '.opts > div', text: 'iPhone 15' },
+    { type: 'click', selector: '.opts > div', pick: 'random' },
+    { type: 'click', selector: '.opts > div', pick: 'next' },
+  ]);
+});

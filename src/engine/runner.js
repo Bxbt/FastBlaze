@@ -91,10 +91,14 @@
     },
     // {click: selector=CSS} or {click: text=Label} (optionally both: text inside selector scope)
     // maxdelay=5s overrides how long to wait for the element (default: Settings).
+    // list=<all options> marks a dropdown option (recorded automatically). Without pick
+    // it only scopes the text search; with pick it is the list to choose from.
     click(a, ctx, emit) {
-      const selector = a.selector ?? a._[0] ?? null;
-      const text = a.text ?? null;
-      if (!selector && !text) throw new Error('click needs selector= or text=');
+      const list = a.list || null;
+      const picking = a.pick != null && a.pick !== '';
+      const selector = (picking && list) ? list : (a.selector ?? a._[0] ?? (a.text != null ? list : null) ?? null);
+      const text = picking ? null : (a.text ?? null);
+      if (!selector && text == null) throw new Error('click needs selector= or text=');
       const action = text != null ? { type: 'click', selector, text } : { type: 'click', selector };
       if (a.maxdelay != null && a.maxdelay !== '') action.timeout = parseDelay(a.maxdelay);
       if (isYes(a.force, false)) action.force = true; // skip the "really clickable" checks
@@ -103,7 +107,7 @@
       if (a.pick != null && a.pick !== '') {
         const pick = String(a.pick).trim().toLowerCase();
         if (!/^(random|next|first|last|[1-9]\d*)$/.test(pick)) throw new Error('pick must be random, next, first, last or a number');
-        if (!selector) throw new Error('pick needs selector= (all options of the list)');
+        if (!selector) throw new Error('pick needs selector= or list= (all options of the list)');
         action.pick = pick;
       }
       if (a.exclude) action.exclude = String(a.exclude).split('|').map((x) => x.trim()).filter(Boolean);

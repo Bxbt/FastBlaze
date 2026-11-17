@@ -212,7 +212,7 @@ async function stopRecording(msg, sender) {
   await setRec(null);
   if (!msg.save) return { ok: true, count: 0 };
   if (!s.steps.length) return { ok: false, error: 'no steps recorded' };
-  const template = globalThis.FastBlaze.recording.buildRecordedTemplate(s.steps, { convert: msg.convert !== false });
+  const template = globalThis.FastBlaze.recording.buildRecordedTemplate(s.steps, { convert: msg.convert !== false, dropdowns: msg.dropdowns || 'fixed' });
   if (s.fromTabId) {
     await chrome.storage.local.set({ [LAST_RECORDING_KEY]: { template, at: Date.now(), count: s.steps.length } });
     try {
