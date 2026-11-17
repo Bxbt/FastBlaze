@@ -37,6 +37,8 @@
     <option value="50">เชียงใหม่</option>
     <option value="40">ขอนแก่น</option>
   </select>
+  <label>Shadow DOM editor (selector: #editor |&gt; .input)</label>
+  <fb-editor id="editor"></fb-editor>
   <label>Notes (textarea)</label><textarea data-testid="input-notes" rows="3"></textarea>
   <label>Rich text (contenteditable)</label>
   <div contenteditable="true" data-testid="rich" style="border:1px solid #999;min-height:40px;padding:6px"></div>
@@ -44,6 +46,16 @@
   <div id="mirror"></div>
 
   <script>
+    // Web component with an open shadow root (like rich chat / editor widgets).
+    customElements.define('fb-editor', class extends HTMLElement {
+      constructor() {
+        super();
+        const root = this.attachShadow({ mode: 'open' });
+        root.innerHTML = '<style>.input{width:100%;padding:7px 9px;box-sizing:border-box;border:1px solid #6366f1;border-radius:6px}</style>'
+          + '<input class="input" placeholder="inside shadow root"><button class="send" type="button">Send</button>';
+        root.querySelector('.send').addEventListener('click', () => { state.shadowSent = root.querySelector('.input').value; show(); });
+      }
+    });
     // Simulates a framework-controlled form: state only updates from input events.
     const state = {};
     const mirror = document.getElementById('mirror');
@@ -88,7 +100,7 @@
   <!-- Only for testing without installing the extension (?harness) -->
   <script>
     if (location.search.includes('harness')) {
-      const files = ['chrome-mock.js', '../src/engine/expr.js', '../src/engine/parser.js', '../src/engine/thaiid.js',
+      const files = ['chrome-mock.js', '../src/engine/expr.js', '../src/engine/parser.js', '../src/engine/thaiid.js', '../src/engine/generators.js',
         '../src/engine/runner.js', '../src/shared/defaults.js', '../src/shared/storage.js',
         '../src/content/dom.js', '../src/content/ui.js', '../src/content/sound.js', '../src/content/selector.js', '../src/content/picker.js',
         '../src/content/content.js'];

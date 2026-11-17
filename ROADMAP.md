@@ -1,6 +1,6 @@
 # FastBlaze Roadmap
 
-สถานะ: v0.3 — Phase 1 + Phase 3 เสร็จ (flow เสถียร, settings, logo, element picker, theme)
+สถานะ: v0.5 — Phase 1 + 2 + 3 + 5 เสร็จ (flow เสถียร, settings, logo, element picker, theme)
 ลำดับด้านล่างเรียงตาม "คุ้มค่า / แรงที่ใช้" — ทำทีละ phase, แต่ละ phase ใช้งานได้จริงเมื่อจบ
 
 ---
@@ -19,13 +19,15 @@
 
 ## Phase 2 — Editor อ่านง่าย (~1 วัน)
 
-- [ ] Syntax highlight ใน template (click = ฟ้า, form = เขียว, text = ปกติ, error = แดง)
-- [ ] ปุ่ม "Format" — แสดง 1 คำสั่งต่อบรรทัด (ขึ้นบรรทัดเฉพาะที่แสดง ไม่กระทบตอนรัน)
-- [ ] Sidebar แทรกคำสั่ง: click / formtext / formmenu / thaiid / random / wait / key / import
-- [ ] Autocomplete `{import: /` → รายชื่อ shortcut
+- [x] Syntax highlight ใน template (action = น้ำเงิน, form = เขียว, data = ฟ้า, import = ส้ม, logic = ม่วง, ไม่รู้จัก = แดง)
+- [x] ปุ่ม "Format" / "Compact" — 1 คำสั่งต่อบรรทัดด้วย `\` ต่อบรรทัด (ผลลัพธ์ตอนรันเหมือนเดิม)
+- [x] แผง Dynamic commands: ค้นหา + ฟอร์มตั้งค่าแบบ dropdown สำหรับทุกคำสั่ง
+- [x] Autocomplete `{import: /` → รายชื่อ shortcut
 - [x] ช่อง "Try it out" ในหน้า Options (หน้า Welcome + ใต้ Preview)
 - [x] Sidebar: พับ/ขยายโฟลเดอร์, ลากสลับตำแหน่ง/ย้ายโฟลเดอร์, เมนูคลิกขวา, ปิดใช้โฟลเดอร์, เรียงลำดับ
-- [ ] กด step ใน Preview → กระโดดไปตำแหน่งใน template
+- [x] กด step ใน Preview → กระโดดไปตำแหน่งใน template
+- [x] หน้า editor แบบ Label / Shortcut + Try it out popover + Edit/Preview
+- [x] CI: GitHub Actions รัน syntax check + `npm test` ทุก PR
 
 ## Phase 3 — Element picker (~1 วัน) ⭐ คุ้มที่สุดสำหรับ automation
 
@@ -46,8 +48,8 @@
 
 ## Phase 5 — Test data generators (~0.5 วัน)
 
-- [ ] `{thaiphone}` เบอร์มือถือ 06/08/09, `{thainame}` ชื่อ-นามสกุลไทยสุ่ม, `{email}`
-- [ ] `{date: format=DDMMYYYY; era=be; shift=-25y}` รองรับปี พ.ศ. (ใช้กับ date-of-birth)
+- [x] `{thaiphone}` เบอร์มือถือ/บ้าน, `{thainame}` ชื่อ-นามสกุลไทย (+อังกฤษ, คำนำหน้า), `{email}`, `{zipcode}`, `{bankaccount}`, `{randomtext}`
+- [x] `{date: age=20-40; format=DDMMBBBB}` / `shift=-3d` รองรับปี พ.ศ. และชื่อเดือนไทย
 - [ ] `{clipboard}`, `{cursor}`
 
 ## Phase 6 — Data & การแชร์ (~0.5–1 วัน)

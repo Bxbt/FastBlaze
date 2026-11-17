@@ -278,15 +278,19 @@
     if (hit && hit.f.disabled) setCollapsed(DISABLED_OPEN, true);
     $('editor').hidden = !hit;
     $('empty').hidden = !!hit;
+    document.querySelector('main').classList.toggle('editing', !!hit);
     if (!hit) renderWelcome();
     if (hit) {
       $('f-name').value = hit.s.name;
       $('f-shortcut').value = hit.s.shortcut;
       $('f-text').value = hit.s.text;
-      $('f-folder').replaceChildren(...data.folders.map((f) => el('option', { value: f.id, textContent: f.name })));
-      $('f-folder').value = hit.f.id;
       $('saved').textContent = '';
       updateDupWarning();
+      taTouched = false;
+      $('try-pop').hidden = true;
+      selectedItem = -1;
+      highlight();
+      setView(view);
       renderPreview();
     }
     renderTree();
@@ -316,25 +320,22 @@
     hit.s.name = $('f-name').value;
     hit.s.shortcut = $('f-shortcut').value.trim();
     hit.s.text = $('f-text').value;
-    const target = $('f-folder').value;
-    if (target !== hit.f.id) {
-      hit.f.snippets = hit.f.snippets.filter((s) => s !== hit.s);
-      data.folders.find((f) => f.id === target).snippets.push(hit.s);
-    }
     updateDupWarning();
     renderTree();
     schedulePersist();
   }
 
-  let previewTimer = null;
   function renderPreview() {
     const hit = findSnippet(selectedId);
     if (!hit) return;
     const lookup = (sc) => allSnippets().find((x) => x.s.shortcut === sc)?.s.text ?? null;
-    const { actions, errors } = FB.compile(hit.s.text, { lookup });
+    const testData = { phones: currentSettings.phoneAllow, banks: currentSettings.bankAllow };
+    const { actions, errors } = FB.compile(hit.s.text, { lookup, testData });
     $('preview-list').replaceChildren(...actions.map((a) => {
       const detail = a.type === 'text' ? a.value : FB.describeAction(a).replace(/^\w+ /, '');
-      return el('li', {}, [el('span', { className: `kind ${a.type}`, textContent: a.type }), el('span', { className: 'mono', textContent: detail })]);
+      const li = el('li', { title: 'Jump to this step in the template' }, [el('span', { className: `kind ${a.type}`, textContent: a.type }), el('span', { className: 'mono', textContent: detail })]);
+      li.addEventListener('click', () => jumpTo(a.src));
+      return li;
     }));
     $('preview-errors').hidden = !errors.length;
     $('preview-errors').textContent = errors.join('\n');
@@ -460,12 +461,7 @@
   }
 
   // ---------- wiring ----------
-  for (const id of ['f-name', 'f-shortcut', 'f-folder']) $(id).addEventListener('input', onEdit);
-  $('f-text').addEventListener('input', () => {
-    onEdit();
-    clearTimeout(previewTimer);
-    previewTimer = setTimeout(renderPreview, 300);
-  });
+  for (const id of ['f-name', 'f-shortcut']) $(id).addEventListener('input', onEdit);
   $('editor').addEventListener('submit', (e) => e.preventDefault());
   $('search').addEventListener('input', renderTree);
   $('new-snippet').addEventListener('click', () => newSnippet());
@@ -503,13 +499,1088 @@
     if (area === 'local' && changes[LAST_PICK_KEY]) showPick(changes[LAST_PICK_KEY].newValue);
   });
   $('insert-pick').addEventListener('click', () => {
-    if (!lastPick) return;
-    const ta = $('f-text');
-    ta.focus();
-    ta.setRangeText(lastPick.command, ta.selectionStart, ta.selectionEnd, 'end');
-    onEdit();
-    renderPreview();
+    if (lastPick) insertAtCursor(lastPick.command);
   });
+
+  // ---------- code editor: highlight, insert, format, modes ----------
+  const ta = $('f-text');
+  let taTouched = false;
+
+  // ---------- blocks view: inline editor (type text, commands are chips) ----------
+  // The textarea (#f-text) stays the source of truth; this view converts both ways:
+  //   template -> DOM: text nodes, <br> (real newline), <br class="cont"> (visual
+  //   line continuation), chip <span contenteditable=false data-src="{...}">
+  //   DOM -> template: serializeRich()
+  let view = 'blocks';
+  try { view = localStorage.getItem('fastblaze.editorView') || 'blocks'; } catch { /* ignore */ }
+  let selectedItem = -1; // kept for compatibility with select()
+  let dragChip = null;
+  let lastRange = null;
+  let syncingFromRich = false;
+  const rich = $('blocks');
+  const ZW = /[​﻿]/g;
+
+  const CMD_ICON = {
+    click: 'mouse', select: 'list', clear: 'eraser', key: 'keycap', wait: 'clock',
+    formtext: 'textfield', formmenu: 'dropdown', formparagraph: 'paragraph',
+    thaiid: 'idcard', 'random-number': 'dice', import: 'fileplus', thaiphone: 'phone', thainame: 'user',
+    email: 'mail', date: 'calendar', zipcode: 'pin', bankaccount: 'bank', randomtext: 'text',
+  };
+  const escapeText = (s) => s.replace(/[\\{}]/g, '\\$&');
+
+  /** Muted keyword + bold value pairs shown on a chip. */
+  function chipParts(t) {
+    const n = t.node;
+    if (n.type === 'assign') return { icon: 'variable', parts: [[n.name, `= ${n.value.raw ?? ''}`]] };
+    if (n.type === 'expr') return { icon: 'sigma', parts: [['=', n.expr]] };
+    if (n.type !== 'cmd') return { icon: 'help', parts: [['?', t.text]] };
+    const a = n.args;
+    const P = (k, v) => (v == null || v === '' ? null : [k, String(v)]);
+    let parts;
+    switch (n.name) {
+      case 'click': parts = [a.text != null ? P('text', a.text) : P('selector', a.selector ?? a._[0]), P('max', a.maxdelay)]; break;
+      case 'wait': parts = [P('delay', `+${a.delay ?? a._[0] ?? '500ms'}`)]; break;
+      case 'key': parts = [P('key', a.key ?? a._[0])]; break;
+      case 'select': parts = [P('select', a.text ?? a.value ?? (a.index != null ? `#${a.index}` : '')), P('in', a.selector)]; break;
+      case 'clear': parts = [P('clear', a.selector ?? a._[0] ?? 'focused field')]; break;
+      case 'formtext': case 'formparagraph': parts = [P('field', a.name), P('default', a.default)]; break;
+      case 'formmenu': parts = [P('menu', a.name)]; break;
+      case 'thaiid': parts = [['Thai ID', a.prefix ? `${a.prefix}…` : ''], P('format', a.format)]; break;
+      case 'random-number': parts = [P('random', `${a.min ?? 0}–${a.max ?? 100}`)]; break;
+      case 'import': parts = [P('import', a.shortcut ?? a._[0])]; break;
+      case 'thaiphone': parts = [['phone', a.source === 'random' ? 'random' : 'allow list'], P('type', a.type)]; break;
+      case 'thainame': parts = [['name', [a.part ?? a._[0], a.gender, a.lang === 'en' ? 'EN' : '', a.title === 'yes' ? 'title' : ''].filter(Boolean).join(' · ') || 'full']]; break;
+      case 'email': parts = [['email', a.domain ?? 'example.com']]; break;
+      case 'date': parts = [['date', a.age ? `age ${a.age}` : a.shift ? a.shift : 'today'], P('format', a.format ?? a._[0])]; break;
+      case 'zipcode': parts = [['zip code', '']]; break;
+      case 'bankaccount': parts = [['bank account', a.source === 'random' ? 'random' : 'allow list']]; break;
+      case 'randomtext': parts = [['text', `${a.length ?? a._[0] ?? 8} ${a.type ?? 'alnum'}`]]; break;
+      default: parts = [[n.name, Object.entries(a).filter(([k]) => k !== '_').map(([k, v]) => `${k}=${v}`).join('; ')]];
+    }
+    return { icon: CMD_ICON[n.name] || 'help', parts: parts.filter(Boolean) };
+  }
+
+  /** A non-editable, draggable chip for one command. */
+  function makeChip(raw) {
+    const t = FB.tokenizeTemplate(raw)[0];
+    const { icon, parts } = chipParts(t);
+    const x = el('span', { className: 'blk-x', title: 'Remove', textContent: '×' });
+    const chip = el('span', {
+      className: `blk blk-cmd blk-${t.kind}`,
+      contentEditable: 'false',
+      draggable: true,
+      title: t.kind === 'unknown' ? `Unknown command: ${raw}` : `${raw}\nClick to edit · drag to move`,
+    }, [
+      FB.icon(icon),
+      ...parts.flatMap(([k, v]) => [el('span', { className: 'blk-k', textContent: k }), ...(v ? [el('span', { className: 'blk-v', textContent: v })] : [])]),
+      x,
+    ]);
+    chip.dataset.src = raw;
+    return chip;
+  }
+
+  /** Template text -> DOM nodes (used for rendering and for paste). */
+  function templateNodes(src) {
+    const nodes = [];
+    let pos = 0;
+    for (const t of FB.tokenizeTemplate(src)) {
+      const start = pos;
+      pos += t.text.length;
+      if (t.kind === 'text') {
+        t.text.split('\n').forEach((line, i) => {
+          if (i) nodes.push(document.createElement('br'));
+          if (line) nodes.push(document.createTextNode(line));
+        });
+      } else if (t.kind === 'escape') nodes.push(document.createTextNode(t.text.slice(1)));
+      else if (t.kind === 'cont') nodes.push(el('br', { className: 'cont' }));
+      else {
+        const chip = makeChip(t.text);
+        chip.dataset.start = String(start);
+        nodes.push(chip);
+      }
+    }
+    return nodes;
+  }
+
+  /** DOM -> template text. */
+  function serializeRich(root) {
+    let out = '';
+    const walk = (node) => {
+      for (const n of node.childNodes) {
+        if (n.nodeType === Node.TEXT_NODE) out += escapeText(n.data.replace(ZW, ''));
+        else if (n.nodeType !== Node.ELEMENT_NODE) continue;
+        else if (n.classList.contains('drop-caret')) continue;
+        else if (n.dataset && n.dataset.src != null) out += n.dataset.src;
+        else if (n.tagName === 'BR') {
+          // Chrome adds a trailing <br> so an empty last line stays visible; ignore it.
+          if (!n.nextSibling && n.parentNode === root && !n.classList.contains('cont') && out.endsWith('\n')) continue;
+          out += n.classList.contains('cont') ? '\\\n' : '\n';
+        } else if (n.tagName === 'DIV' || n.tagName === 'P') {
+          if (out && !out.endsWith('\n')) out += '\n';
+          walk(n);
+        } else walk(n);
+      }
+    };
+    walk(root);
+    // An "empty" editor in Chrome is just a placeholder <br>.
+    if (out === '\n' && root.childNodes.length === 1) return '';
+    return out;
+  }
+
+  function renderBlocks() {
+    if (view !== 'blocks' || syncingFromRich) return;
+    const nodes = templateNodes(ta.value);
+    // A trailing <br> needs a second one so the empty last line is visible.
+    if (nodes.length && nodes[nodes.length - 1].tagName === 'BR') nodes.push(document.createElement('br'));
+    rich.replaceChildren(...nodes);
+    rich.classList.toggle('empty', !ta.value);
+    lastRange = null;
+  }
+
+  /** Push the editor content back into the template. */
+  function syncFromRich() {
+    const src = serializeRich(rich);
+    rich.classList.toggle('empty', !src);
+    if (src === ta.value) return;
+    ta.value = src;
+    syncingFromRich = true;
+    try { afterTextChange(); } finally { syncingFromRich = false; }
+  }
+
+  function saveRange() {
+    const sel = window.getSelection();
+    if (sel.rangeCount && rich.contains(sel.getRangeAt(0).startContainer)) lastRange = sel.getRangeAt(0).cloneRange();
+  }
+
+  function placeCaretAfter(node) {
+    const r = document.createRange();
+    r.setStartAfter(node);
+    r.collapse(true);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(r);
+    lastRange = r.cloneRange();
+  }
+
+  /** Insert template text (commands become chips) at the caret, or at the end. */
+  function blocksInsert(text) {
+    rich.focus();
+    let range = lastRange;
+    if (!range || !rich.contains(range.startContainer)) {
+      range = document.createRange();
+      range.selectNodeContents(rich);
+      range.collapse(false);
+    }
+    range.deleteContents();
+    const nodes = templateNodes(text);
+    const frag = document.createDocumentFragment();
+    nodes.forEach((n) => frag.append(n));
+    const last = nodes[nodes.length - 1];
+    range.insertNode(frag);
+    if (last) placeCaretAfter(last);
+    syncFromRich();
+  }
+
+  // Typing, deleting, Enter, paste
+  rich.addEventListener('input', syncFromRich);
+  rich.addEventListener('keyup', saveRange);
+  rich.addEventListener('mouseup', saveRange);
+  rich.addEventListener('blur', saveRange);
+  rich.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      document.execCommand('insertLineBreak');
+    }
+  });
+  rich.addEventListener('paste', (e) => {
+    const text = e.clipboardData.getData('text/plain');
+    if (!text) return;
+    e.preventDefault();
+    saveRange();
+    blocksInsert(text);
+  });
+  rich.addEventListener('drop', (e) => { if (!dragChip) e.preventDefault(); }, true); // no foreign drops
+
+  // Chip clicks: × removes, otherwise edit in the side panel
+  rich.addEventListener('mousedown', (e) => {
+    if (e.target.closest('.blk-x')) e.preventDefault();
+  });
+  rich.addEventListener('click', (e) => {
+    const chip = e.target.closest('.blk-cmd');
+    if (!chip) return;
+    if (e.target.closest('.blk-x')) {
+      chip.remove();
+      syncFromRich();
+      return;
+    }
+    rich.querySelectorAll('.blk.selected').forEach((c) => c.classList.remove('selected'));
+    chip.classList.add('selected');
+    placeCaretAfter(chip);
+    editCommand(chip);
+  });
+
+  // Drag a chip to any caret position in the text
+  let dropMarker = null;
+  function clearDrop() {
+    if (dropMarker) dropMarker.remove();
+    dropMarker = null;
+  }
+  rich.addEventListener('dragstart', (e) => {
+    const chip = e.target.closest && e.target.closest('.blk-cmd');
+    if (!chip) { e.preventDefault(); return; }
+    dragChip = chip;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', chip.dataset.src);
+    requestAnimationFrame(() => chip.classList.add('dragging'));
+  });
+  rich.addEventListener('dragend', () => {
+    if (dragChip) dragChip.classList.remove('dragging');
+    dragChip = null;
+    clearDrop();
+  });
+  rich.addEventListener('dragover', (e) => {
+    if (!dragChip) return;
+    e.preventDefault();
+    const r = document.caretRangeFromPoint(e.clientX, e.clientY);
+    if (!r || !rich.contains(r.startContainer) || dragChip.contains(r.startContainer)) return;
+    if (!dropMarker) dropMarker = el('span', { className: 'drop-caret', contentEditable: 'false' });
+    r.insertNode(dropMarker);
+  });
+  rich.addEventListener('drop', (e) => {
+    if (!dragChip) return;
+    e.preventDefault();
+    const chip = dragChip;
+    dragChip = null;
+    chip.classList.remove('dragging');
+    if (dropMarker && dropMarker.parentNode) {
+      dropMarker.replaceWith(chip);
+      dropMarker = null;
+    } else clearDrop();
+    placeCaretAfter(chip);
+    syncFromRich();
+  });
+
+  function setView(v) {
+    view = v;
+    try { localStorage.setItem('fastblaze.editorView', v); } catch { /* ignore */ }
+    $('view-blocks').setAttribute('aria-pressed', String(v === 'blocks'));
+    $('view-code').setAttribute('aria-pressed', String(v === 'code'));
+    rich.hidden = v !== 'blocks';
+    $('code-wrap').hidden = v !== 'code';
+    closeAc();
+    if (v === 'blocks') renderBlocks();
+    else { highlight(); autoGrow(); }
+  }
+  $('view-blocks').addEventListener('click', () => setView('blocks'));
+  $('view-code').addEventListener('click', () => setView('code'));
+
+
+
+  function highlight() {
+    const toks = FB.tokenizeTemplate(ta.value);
+    $('code-hl').replaceChildren(
+      ...toks.map((t) => (t.kind === 'text'
+        ? document.createTextNode(t.text)
+        : el('span', { className: `tok tok-${t.kind}`, textContent: t.text, title: t.kind === 'unknown' ? 'Unknown command' : '' }))),
+      document.createTextNode('\n'),
+    );
+    autoGrow();
+  }
+
+  // The textarea grows with its content, so the highlight layer never has to scroll.
+  function autoGrow() {
+    if ($('edit-pane').hidden || view !== 'code') return;
+    ta.style.height = 'auto';
+    ta.style.height = `${Math.max($('edit-pane').clientHeight, ta.scrollHeight)}px`;
+  }
+
+  let previewDebounce = null;
+  function afterTextChange() {
+    onEdit();
+    highlight();
+    renderBlocks();
+    clearTimeout(previewDebounce);
+    previewDebounce = setTimeout(renderPreview, 300);
+  }
+
+  /** Insert at the caret. One «…» marker in `text` is selected afterwards. */
+  function insertAtCursor(text) {
+    const m = text.indexOf('«');
+    const n = text.indexOf('»');
+    const clean = text.replace(/[«»]/g, '');
+    setMode('edit');
+    if (view === 'blocks') {
+      blocksInsert(clean);
+      return;
+    }
+    ta.focus();
+    if (!taTouched) ta.setSelectionRange(ta.value.length, ta.value.length);
+    const start = ta.selectionStart;
+    if (!document.execCommand('insertText', false, clean)) {
+      ta.setRangeText(clean, ta.selectionStart, ta.selectionEnd, 'end');
+      afterTextChange();
+    }
+    if (m !== -1 && n > m) ta.setSelectionRange(start + m, start + n - 1);
+    taTouched = true;
+  }
+
+  /** Replace the whole template, keeping undo history. */
+  function replaceTemplate(text) {
+    if (text === ta.value) return;
+    if (view === 'blocks') {
+      ta.value = text;
+      afterTextChange();
+      return;
+    }
+    ta.focus();
+    ta.select();
+    if (!document.execCommand('insertText', false, text)) {
+      ta.value = text;
+      afterTextChange();
+    }
+  }
+
+  ta.addEventListener('input', () => { taTouched = true; afterTextChange(); updateAutocomplete(); });
+  ta.addEventListener('click', () => { taTouched = true; updateAutocomplete(); });
+  ta.addEventListener('keyup', (e) => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) updateAutocomplete(); });
+  window.addEventListener('resize', autoGrow);
+  $('fmt-format').addEventListener('click', () => replaceTemplate(FB.formatTemplate(ta.value)));
+  $('fmt-compact').addEventListener('click', () => replaceTemplate(FB.compactTemplate(ta.value)));
+
+  let mode = 'edit';
+  function setMode(m) {
+    mode = m;
+    $('mode-edit').setAttribute('aria-pressed', String(m === 'edit'));
+    $('mode-preview').setAttribute('aria-pressed', String(m === 'preview'));
+    $('edit-pane').hidden = m !== 'edit';
+    $('preview-pane').hidden = m !== 'preview';
+    for (const id of ['fmt-format', 'fmt-compact']) $(id).disabled = m !== 'edit';
+    closeAc();
+    if (m === 'preview') renderPreview();
+    else setView(view);
+  }
+  $('mode-edit').addEventListener('click', () => setMode('edit'));
+  $('mode-preview').addEventListener('click', () => setMode('preview'));
+
+  // Screen rectangle of the character at `offset`, measured on the highlight layer
+  // (it has exactly the same text and layout as the textarea).
+  function charRect(offset) {
+    const pre = $('code-hl');
+    const walker = document.createTreeWalker(pre, NodeFilter.SHOW_TEXT);
+    let pos = 0;
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const len = node.data.length;
+      if (offset <= pos + len && len) {
+        const o = Math.min(offset - pos, len - 1);
+        const r = document.createRange();
+        r.setStart(node, o);
+        r.setEnd(node, o + 1);
+        return r.getClientRects()[0] || r.getBoundingClientRect();
+      }
+      pos += len;
+    }
+    return pre.getBoundingClientRect();
+  }
+
+  /** Jump from a preview step to the template text that produced it. */
+  function jumpTo(src) {
+    if (!src) return;
+    setMode('edit');
+    if (view === 'blocks') {
+      renderBlocks();
+      const chips = [...rich.querySelectorAll('.blk-cmd')];
+      const chip = chips.find((c) => Number(c.dataset.start) === src.start)
+        || chips.find((c) => Number(c.dataset.start) <= src.start && src.start < Number(c.dataset.start) + c.dataset.src.length);
+      if (chip) {
+        chip.classList.add('selected', 'flash');
+        chip.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        placeCaretAfter(chip);
+      }
+      return;
+    }
+    ta.focus();
+    ta.setSelectionRange(src.start, src.end);
+    const pane = $('edit-pane');
+    const r = charRect(src.start);
+    const pr = pane.getBoundingClientRect();
+    if (r.top < pr.top || r.bottom > pr.bottom) pane.scrollBy({ top: r.top - pr.top - pane.clientHeight / 3, behavior: 'smooth' });
+  }
+
+  // ---------- import autocomplete ----------
+  let ac = { open: false, items: [], index: 0, from: 0 };
+
+  function closeAc() {
+    ac.open = false;
+    $('ac').hidden = true;
+  }
+
+  function updateAutocomplete() {
+    const pos = ta.selectionStart;
+    if (pos !== ta.selectionEnd) return closeAc();
+    const m = ta.value.slice(0, pos).match(/\{import:\s*(\/?[^\s;{}]*)$/);
+    if (!m) return closeAc();
+    const q = m[1].toLowerCase().replace(/^\//, '');
+    const items = allSnippets().map((x) => x.s)
+      .filter((s) => s.shortcut && s.id !== selectedId)
+      .filter((s) => !q || s.shortcut.toLowerCase().slice(1).startsWith(q) || (s.name || '').toLowerCase().includes(q))
+      .slice(0, 8);
+    if (!items.length) return closeAc();
+    ac = { open: true, items, index: Math.min(ac.open ? ac.index : 0, items.length - 1), from: pos - m[1].length };
+    renderAc();
+  }
+
+  function renderAc() {
+    const box = $('ac');
+    box.replaceChildren(...ac.items.map((s, i) => {
+      const item = el('div', { className: `ac-item${i === ac.index ? ' active' : ''}`, role: 'option' }, [
+        el('span', { className: 'chip', textContent: s.shortcut }),
+        el('span', { className: 'name', textContent: s.name || '' }),
+      ]);
+      item.addEventListener('mousedown', (e) => { e.preventDefault(); acceptAc(i); });
+      return item;
+    }));
+    const wrap = $('code-wrap').getBoundingClientRect();
+    const r = charRect(Math.max(0, ta.selectionStart - 1));
+    box.style.left = `${Math.min(r.left - wrap.left, wrap.width - 260)}px`;
+    box.style.top = `${r.bottom - wrap.top + 6}px`;
+    box.hidden = false;
+  }
+
+  function acceptAc(i) {
+    const s = ac.items[i];
+    if (!s) return;
+    ta.setSelectionRange(ac.from, ta.selectionStart);
+    const close = ta.value[ta.selectionEnd] === '}' ? '' : '}';
+    closeAc();
+    if (!document.execCommand('insertText', false, s.shortcut + close)) {
+      ta.setRangeText(s.shortcut + close, ta.selectionStart, ta.selectionEnd, 'end');
+      afterTextChange();
+    }
+  }
+
+  ta.addEventListener('keydown', (e) => {
+    if (!ac.open) return;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      ac.index = (ac.index + (e.key === 'ArrowDown' ? 1 : -1) + ac.items.length) % ac.items.length;
+      renderAc();
+    } else if (e.key === 'Enter' || e.key === 'Tab') {
+      e.preventDefault();
+      acceptAc(ac.index);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      closeAc();
+    }
+  });
+  ta.addEventListener('blur', () => setTimeout(closeAc, 150));
+
+  // ---------- Try it out popover ----------
+  function closeTry() { $('try-pop').hidden = true; }
+  $('try-btn').addEventListener('click', () => {
+    const pop = $('try-pop');
+    if (!pop.hidden) return closeTry();
+    clearTimeout(saveTimer);
+    persist(); // the expander reads saved snippets
+    const sc = $('f-shortcut').value.trim();
+    $('try-chip').textContent = sc || '(no shortcut yet)';
+    $('try-box').value = '';
+    pop.hidden = false;
+    $('try-box').focus();
+  });
+  document.addEventListener('mousedown', (e) => {
+    if (!$('try-pop').hidden && !e.target.closest('.shortcut-field')) closeTry();
+  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('try-pop').hidden) closeTry(); });
+
+  // ---------- dynamic commands ----------
+  const tplArg = (s) => String(s).replace(/[\\{};]/g, '\\$&');
+  const KEYS = [['enter', 'Enter'], ['tab', 'Tab'], ['escape', 'Escape'], ['up', 'Arrow up'], ['down', 'Arrow down'],
+    ['left', 'Arrow left'], ['right', 'Arrow right'], ['space', 'Space'], ['backspace', 'Backspace']];
+  const snippetOptions = () => allSnippets().map((x) => x.s).filter((s) => s.shortcut && s.id !== selectedId)
+    .map((s) => [s.shortcut, `${s.shortcut}  ${s.name ? `— ${s.name}` : ''}`]);
+
+  const COMMANDS = [
+    {
+      id: 'click', group: 'Automation', frequent: true, icon: 'mouse', title: 'Click element',
+      desc: 'Click an element on the page, then type into it', keywords: 'button selector testid tap pick',
+      fields: [
+        { key: 'value', type: 'element', label: 'Element', required: true,
+          desc: 'The element to click. Select it on a web page, or type a CSS selector.' },
+        { key: 'maxdelay', label: 'Max delay', short: 'Time', type: 'number', row: 'md',
+          desc: () => `The element is clicked as soon as it becomes clickable. If it does not appear within this time, the snippet stops and shows an error. Leave empty to use Settings (${Math.round(currentSettings.timeout / 100) / 10}s).` },
+        { key: 'unit', label: 'Unit', type: 'select', options: [['s', 'Seconds'], ['ms', 'Milliseconds']], value: 's', row: 'md' },
+        { key: 'by', label: 'Find the element by', type: 'select', advanced: true,
+          options: [['selector', 'CSS selector'], ['text', 'Visible text']], value: 'selector',
+          desc: 'Visible text works well for dropdown options that have no test id.' },
+        { key: 'within', label: 'Only inside (CSS selector)', mono: true, advanced: true, show: (v) => v.by === 'text',
+          desc: 'Optional. Limits the text search to this part of the page.' },
+      ],
+      build: (v) => {
+        const delay = v.maxdelay !== '' && v.maxdelay != null ? `; maxdelay=${Number(v.maxdelay)}${v.unit}` : '';
+        return v.by === 'text'
+          ? `{click: text=${tplArg(v.value)}${v.within ? `; selector=${tplArg(v.within)}` : ''}${delay}}`
+          : `{click: selector=${tplArg(v.value)}${delay}}`;
+      },
+    },
+    {
+      id: 'select', group: 'Automation', icon: 'list', title: 'Choose option',
+      desc: 'Pick an option in a native dropdown (<select>)', keywords: 'dropdown select option',
+      fields: [
+        { key: 'selector', label: 'Dropdown (CSS selector)', required: true, mono: true },
+        { key: 'by', label: 'Match option by', type: 'select', options: [['text', 'Option text'], ['value', 'Option value'], ['index', 'Position (0 = first)']], value: 'text' },
+        { key: 'value', label: (v) => ({ text: 'Option text', value: 'Option value', index: 'Position' })[v.by], required: true,
+          type: (v) => (v.by === 'index' ? 'number' : 'text') },
+      ],
+      build: (v) => `{select: selector=${tplArg(v.selector)}; ${v.by}=${tplArg(v.value)}}`,
+    },
+    {
+      id: 'clear', group: 'Automation', icon: 'eraser', title: 'Clear field',
+      desc: 'Empty a field before typing', keywords: 'erase reset empty',
+      fields: [
+        { key: 'target', label: 'Which field', type: 'select', options: [['focused', 'The focused field'], ['selector', 'Field matching a CSS selector']], value: 'focused' },
+        { key: 'selector', label: 'CSS selector', required: true, mono: true, show: (v) => v.target === 'selector' },
+      ],
+      build: (v) => (v.target === 'selector' ? `{clear: selector=${tplArg(v.selector)}}` : '{clear}'),
+    },
+    {
+      id: 'key', group: 'Automation', icon: 'keycap', title: 'Press key',
+      desc: 'Enter, Tab, Escape, arrows…', keywords: 'keyboard enter tab escape',
+      fields: [{ key: 'key', label: 'Key', type: 'select', options: KEYS, value: 'enter' }],
+      build: (v) => `{key: ${v.key}}`,
+    },
+    {
+      id: 'wait', group: 'Automation', icon: 'clock', title: 'Wait',
+      desc: 'Pause before the next step', keywords: 'delay sleep pause',
+      fields: [
+        { key: 'amount', label: 'Duration', short: 'Amount', type: 'number', required: true, value: '500', row: 'dur', desc: 'Pause before running the next step.' },
+        { key: 'unit', label: 'Unit', type: 'select', options: [['ms', 'Milliseconds'], ['s', 'Seconds']], value: 'ms', row: 'dur' },
+      ],
+      build: (v) => `{wait: ${Number(v.amount)}${v.unit}}`,
+    },
+    {
+      id: 'formtext', group: 'Forms', icon: 'textfield', title: 'Text field',
+      desc: 'Ask for a value before inserting', keywords: 'form input ask prompt',
+      fields: [
+        { key: 'name', label: 'Field name', required: true },
+        { key: 'default', label: 'Default value (optional)' },
+        { key: 'cols', label: 'Max length (optional)', type: 'number' },
+      ],
+      build: (v) => `{formtext: name=${tplArg(v.name)}${v.default ? `; default=${tplArg(v.default)}` : ''}${v.cols ? `; cols=${Number(v.cols)}` : ''}}`,
+    },
+    {
+      id: 'formmenu', group: 'Forms', icon: 'dropdown', title: 'Dropdown menu',
+      desc: 'Ask the user to choose from a list', keywords: 'form menu choose options',
+      fields: [
+        { key: 'name', label: 'Field name', required: true },
+        { key: 'options', label: 'Options (comma separated, first = default)', required: true },
+      ],
+      build: (v) => {
+        const opts = v.options.split(',').map((o) => o.trim()).filter(Boolean).map(tplArg);
+        return `{formmenu: name=${tplArg(v.name)}; default=${opts[0] || ''}${opts.slice(1).map((o) => `; ${o}`).join('')}}`;
+      },
+    },
+    {
+      id: 'formparagraph', group: 'Forms', icon: 'paragraph', title: 'Paragraph field',
+      desc: 'Ask for multi-line text', keywords: 'form textarea multiline',
+      fields: [
+        { key: 'name', label: 'Field name', required: true },
+        { key: 'default', label: 'Default value (optional)' },
+      ],
+      build: (v) => `{formparagraph: name=${tplArg(v.name)}${v.default ? `; default=${tplArg(v.default)}` : ''}}`,
+    },
+    {
+      id: 'thaiid', group: 'Test data', frequent: true, icon: 'idcard', title: 'Thai ID (test)',
+      desc: 'Random 13-digit ID with a valid check digit', keywords: 'id card citizen number',
+      fields: [
+        { key: 'prefix', label: 'First digit', type: 'select', value: '8',
+          options: [['', 'Any (1–8)'], ...[1, 2, 3, 4, 5, 6, 7, 8].map((d) => [String(d), String(d)])] },
+        { key: 'format', label: 'Format', type: 'select', options: [['plain', '13 digits'], ['dash', 'With dashes (x-xxxx-xxxxx-xx-x)']], value: 'plain' },
+      ],
+      build: (v) => {
+        const args = [v.prefix ? `prefix=${v.prefix}` : '', v.format === 'dash' ? 'format=dash' : ''].filter(Boolean);
+        return args.length ? `{thaiid: ${args.join('; ')}}` : '{thaiid}';
+      },
+    },
+    {
+      id: 'thaiphone', group: 'Test data', icon: 'phone', title: 'Phone number',
+      desc: 'Thai mobile (06/08/09) or landline number', keywords: 'phone mobile tel เบอร์',
+      fields: [
+        { key: 'type', label: 'Type', type: 'select', options: [['mobile', 'Mobile (10 digits)'], ['landline', 'Landline (9 digits)']], value: 'mobile' },
+        { key: 'format', label: 'Format', type: 'select', options: [['plain', '0812345678'], ['dash', '081-234-5678']], value: 'plain' },
+        { key: 'source', label: 'Source', type: 'select', value: 'list',
+          options: () => [['list', `Allow list in Settings (${currentSettings.phoneAllow.length} numbers)`], ['random', 'Random number (may belong to a real person)']],
+          desc: (v) => (v.source === 'random'
+            ? 'Warning: random numbers are real-looking and are probably assigned to someone. Do not use where SMS or calls are sent.'
+            : currentSettings.phoneAllow.length ? 'Picks one of the team numbers from Settings.' : 'The allow list is empty, so a random number is used until you add numbers in Settings.') },
+        { key: 'prefix', label: 'Starts with (optional)', mono: true, desc: 'Digits to keep at the start, e.g. 064.' },
+      ],
+      build: (v) => {
+        const args = [v.type === 'landline' ? 'type=landline' : '', v.format === 'dash' ? 'format=dash' : '', v.source === 'random' ? 'source=random' : '', v.prefix ? `prefix=${v.prefix.replace(/\D/g, '')}` : ''].filter(Boolean);
+        return args.length ? `{thaiphone: ${args.join('; ')}}` : '{thaiphone}';
+      },
+    },
+    {
+      id: 'thainame', group: 'Test data', frequent: true, icon: 'user', title: 'Thai name',
+      desc: 'Random first name, last name or full name', keywords: 'name person ชื่อ นามสกุล',
+      fields: [
+        { key: 'part', label: 'Part', type: 'select', options: [['full', 'Full name'], ['first', 'First name'], ['last', 'Last name']], value: 'full' },
+        { key: 'gender', label: 'Gender', type: 'select', options: [['any', 'Any'], ['male', 'Male'], ['female', 'Female']], value: 'any', show: (v) => v.part !== 'last' },
+        { key: 'lang', label: 'Language', type: 'select', options: [['th', 'Thai (สมชาย)'], ['en', 'English (Somchai)']], value: 'th' },
+        { key: 'title', label: 'Title', type: 'select', options: [['no', 'No title'], ['yes', 'With title (นาย / นางสาว)']], value: 'no', show: (v) => v.part !== 'last' },
+      ],
+      build: (v) => {
+        const args = [v.part !== 'full' ? `part=${v.part}` : '', v.part !== 'last' && v.gender !== 'any' ? `gender=${v.gender}` : '',
+          v.lang === 'en' ? 'lang=en' : '', v.part !== 'last' && v.title === 'yes' ? 'title=yes' : ''].filter(Boolean);
+        return args.length ? `{thainame: ${args.join('; ')}}` : '{thainame}';
+      },
+    },
+    {
+      id: 'email', group: 'Test data', icon: 'mail', title: 'Email',
+      desc: 'Unique test address on a test domain', keywords: 'email mail address',
+      fields: [
+        { key: 'base', label: 'Name part', value: 'test', mono: true, desc: 'Result looks like test.abcdef12@example.com' },
+        { key: 'domain', label: 'Domain', value: 'example.com', mono: true, desc: 'example.com never delivers mail, so it is safe for tests.' },
+      ],
+      build: (v) => {
+        const args = [v.base && v.base !== 'test' ? `base=${tplArg(v.base)}` : '', v.domain && v.domain !== 'example.com' ? `domain=${tplArg(v.domain)}` : ''].filter(Boolean);
+        return args.length ? `{email: ${args.join('; ')}}` : '{email}';
+      },
+    },
+    {
+      id: 'date', group: 'Test data', frequent: true, icon: 'calendar', title: 'Date',
+      desc: 'Today, a shifted date, or a birthday for an age range', keywords: 'date birthday วันเกิด วันที่ พ.ศ.',
+      fields: [
+        { key: 'mode', label: 'Which date', type: 'select', value: 'age',
+          options: [['today', 'Today'], ['shift', 'Before / after today'], ['age', 'Birthday for an age range']] },
+        { key: 'amount', label: 'Shift', short: 'Amount', type: 'number', value: '1', row: 'shift', show: (v) => v.mode === 'shift' },
+        { key: 'unit', label: 'Unit', type: 'select', row: 'shift', show: (v) => v.mode === 'shift', value: 'd',
+          options: [['d', 'Days'], ['w', 'Weeks'], ['m', 'Months'], ['y', 'Years']] },
+        { key: 'dir', label: 'Direction', type: 'select', show: (v) => v.mode === 'shift', value: '-',
+          options: [['-', 'Ago (in the past)'], ['+', 'From now (in the future)']] },
+        { key: 'ageMin', label: 'Age', short: 'From', type: 'number', value: '20', row: 'age', show: (v) => v.mode === 'age', required: true,
+          desc: 'A random birthday so the person is between these ages today.' },
+        { key: 'ageMax', label: 'To', type: 'number', value: '40', row: 'age', show: (v) => v.mode === 'age', required: true },
+        { key: 'format', label: 'Format', type: 'select', value: 'DDMMBBBB',
+          options: [['DDMMBBBB', '24052545 (DDMMBBBB, พ.ศ.)'], ['DD/MM/BBBB', '24/05/2545 (พ.ศ.)'], ['DD/MM/YYYY', '24/05/2002 (ค.ศ.)'],
+            ['YYYY-MM-DD', '2002-05-24 (ISO)'], ['D MMMM BBBB', '24 พฤษภาคม 2545'], ['D MMM BB', '24 พ.ค. 45'], ['custom', 'Custom…']] },
+        { key: 'custom', label: 'Custom format', mono: true, required: true, show: (v) => v.format === 'custom', value: 'DD/MM/BBBB',
+          desc: 'BBBB/BB = Buddhist year, YYYY/YY = AD year, MMMM/MMM = Thai month, MM/M = month, DD/D = day.' },
+      ],
+      build: (v) => {
+        const fmt = v.format === 'custom' ? v.custom : v.format;
+        const args = [];
+        if (v.mode === 'shift') args.push(`shift=${v.dir}${Math.abs(Number(v.amount) || 0)}${v.unit}`);
+        if (v.mode === 'age') args.push(`age=${Number(v.ageMin)}${Number(v.ageMax) !== Number(v.ageMin) ? `-${Number(v.ageMax)}` : ''}`);
+        if (fmt && fmt !== 'DD/MM/BBBB') args.push(`format=${tplArg(fmt)}`);
+        return args.length ? `{date: ${args.join('; ')}}` : '{date}';
+      },
+    },
+    {
+      id: 'zipcode', group: 'Test data', icon: 'pin', title: 'Zip code',
+      desc: 'Thai postal code with a real province prefix', keywords: 'zip postal postcode รหัสไปรษณีย์',
+      fields: [],
+      build: () => '{zipcode}',
+    },
+    {
+      id: 'bankaccount', group: 'Test data', icon: 'bank', title: 'Bank account',
+      desc: '10-digit account number', keywords: 'bank account บัญชี',
+      fields: [
+        { key: 'source', label: 'Source', type: 'select', value: 'list',
+          options: () => [['list', `Allow list in Settings (${currentSettings.bankAllow.length} accounts)`], ['random', 'Random number (may belong to a real person)']],
+          desc: (v) => (v.source === 'random'
+            ? 'Warning: a random account number can exist. Never use it where money is transferred.'
+            : currentSettings.bankAllow.length ? 'Picks one of the team accounts from Settings.' : 'The allow list is empty, so a random number is used until you add accounts in Settings.') },
+        { key: 'format', label: 'Format', type: 'select', options: [['plain', '1234567890'], ['dash', '123-4-56789-0']], value: 'plain' },
+      ],
+      build: (v) => {
+        const args = [v.format === 'dash' ? 'format=dash' : '', v.source === 'random' ? 'source=random' : ''].filter(Boolean);
+        return args.length ? `{bankaccount: ${args.join('; ')}}` : '{bankaccount}';
+      },
+    },
+    {
+      id: 'randomtext', group: 'Test data', icon: 'text', title: 'Random text',
+      desc: 'Random letters, digits or Thai characters', keywords: 'random string text password code',
+      fields: [
+        { key: 'length', label: 'Length', type: 'number', value: '8', required: true },
+        { key: 'type', label: 'Characters', type: 'select', value: 'alnum',
+          options: [['alnum', 'Letters and digits'], ['letters', 'Letters'], ['lower', 'Lowercase'], ['upper', 'Uppercase'], ['digits', 'Digits'], ['thai', 'Thai letters']] },
+      ],
+      build: (v) => `{randomtext: length=${Number(v.length)}${v.type !== 'alnum' ? `; type=${v.type}` : ''}}`,
+    },
+    {
+      id: 'random', group: 'Test data', icon: 'dice', title: 'Random number',
+      desc: 'A random number in a range', keywords: 'random number digit',
+      fields: [
+        { key: 'min', label: 'Range', short: 'Min', type: 'number', required: true, value: '0', row: 'range' },
+        { key: 'max', label: 'Max', type: 'number', required: true, value: '9', row: 'range' },
+        { key: 'kind', label: 'Type', type: 'select', options: [['whole', 'Whole number'], ['decimal', 'Decimal']], value: 'whole' },
+      ],
+      build: (v) => `{random-number: min=${Number(v.min)}; max=${Number(v.max)}${v.kind === 'decimal' ? '; rounded=no' : ''}}`,
+    },
+    {
+      id: 'import', group: 'Snippets & logic', frequent: true, icon: 'fileplus', title: 'Import snippet',
+      desc: 'Embed another snippet', keywords: 'include reuse embed',
+      fields: [{ key: 'shortcut', label: 'Snippet', type: 'select', options: snippetOptions, required: true }],
+      build: (v) => `{import: ${v.shortcut}}`,
+    },
+    {
+      id: 'var', group: 'Snippets & logic', icon: 'variable', title: 'Set variable',
+      desc: 'Store a value to reuse later', keywords: 'variable assign let',
+      fields: [
+        { key: 'name', label: 'Variable name', required: true, mono: true, pattern: /^[A-Za-z_]\w*$/, patternMsg: 'Letters, digits and _ only; cannot start with a digit.' },
+        { key: 'value', label: 'Value or expression', required: true, mono: true, hint: 'e.g. 5, "text", a + 1, floor(x / 2)' },
+      ],
+      build: (v) => `{${v.name}=${v.value}}`,
+    },
+    {
+      id: 'expr', group: 'Snippets & logic', icon: 'sigma', title: 'Show value',
+      desc: 'Insert the result of an expression', keywords: 'calculate math expression formula',
+      fields: [{ key: 'expr', label: 'Expression', required: true, mono: true, hint: 'Variables, + - * / %, & joins text, floor() round() …' }],
+      build: (v) => `{=${v.expr}}`,
+    },
+  ];
+
+  function renderCommands() {
+    const q = $('cmd-q').value.trim().toLowerCase();
+    const item = (c) => {
+      const b = el('button', { type: 'button', className: 'cmd-item', title: c.desc }, [
+        el('span', { className: 'cmd-icon' }, [FB.icon(c.icon)]),
+        el('span', {}, [el('strong', { textContent: c.title }), el('span', { className: 'desc', textContent: c.desc })]),
+      ]);
+      b.addEventListener('click', () => openCommand(c));
+      return b;
+    };
+    const nodes = [];
+    if (q) {
+      const hits = COMMANDS.filter((c) => `${c.title} ${c.desc} ${c.keywords} ${c.id}`.toLowerCase().includes(q));
+      if (hits.length) nodes.push(...hits.map(item));
+      else nodes.push(el('div', { className: 'cmd-empty', textContent: 'No matching command.' }));
+    } else {
+      nodes.push(el('div', { className: 'cmd-group', textContent: 'Frequently used' }), ...COMMANDS.filter((c) => c.frequent).map(item));
+      for (const g of ['Automation', 'Forms', 'Test data', 'Snippets & logic']) {
+        nodes.push(el('div', { className: 'cmd-group', textContent: g }), ...COMMANDS.filter((c) => c.group === g).map(item));
+      }
+    }
+    $('cmd-list').replaceChildren(...nodes);
+  }
+  $('cmd-q').addEventListener('input', renderCommands);
+  $('open-help').addEventListener('click', () => $('help').showModal());
+
+  // ---------- command config panel (right side) ----------
+  let currentSettings = FB.storage.normalizeSettings();
+  FB.storage.loadSettings().then((s) => { currentSettings = s; });
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes[FB.storage.SETTINGS_KEY]) currentSettings = FB.storage.normalizeSettings(changes[FB.storage.SETTINGS_KEY].newValue);
+  });
+
+  let pickWaiter = null; // { done(candidate), me: tab }
+
+  function showList() {
+    if (pickWaiter) cancelPick();
+    $('cmd-config').hidden = true;
+    $('cmd-config').replaceChildren();
+    for (const n of document.querySelectorAll('.commands > .cmd-search, .commands > .cmd-list, .commands > .cmd-footer')) n.hidden = false;
+  }
+
+  /**
+   * Start "Select from website": the background switches to the last used tab and
+   * runs the picker there; the picker follows any tab the user switches to.
+   * The result arrives through storage (lastPick).
+   */
+  async function pickFromWebsite(done, onWaiting) {
+    if (!chrome.tabs || !chrome.tabs.getCurrent) {
+      // Test harness without tab APIs: just wait for a pick to arrive in storage.
+      pickWaiter = { done, since: Date.now() };
+      onWaiting();
+      return;
+    }
+    const me = await chrome.tabs.getCurrent();
+    pickWaiter = { done, since: Date.now() };
+    onWaiting();
+    const res = await chrome.runtime.sendMessage({ type: 'fastblaze:pick-start', fromTabId: me && me.id }).catch((err) => ({ ok: false, error: err.message }));
+    if (!res || !res.ok) {
+      pickWaiter = null;
+      done(null);
+      await FB.dialog.alert({ title: 'Cannot start picking', message: [(res && res.error) || 'Unknown error', '. Open the web page in another tab, then try again.'] });
+    }
+  }
+
+  function cancelPick() {
+    pickWaiter = null;
+    if (chrome.runtime && chrome.runtime.sendMessage) chrome.runtime.sendMessage({ type: 'fastblaze:pick-cancel' }).catch(() => {});
+  }
+
+  chrome.storage.onChanged.addListener(async (changes, area) => {
+    if (area !== 'local' || !changes[LAST_PICK_KEY] || !pickWaiter) return;
+    const p = changes[LAST_PICK_KEY].newValue;
+    if (!p || p.at < pickWaiter.since) return;
+    const { done } = pickWaiter;
+    pickWaiter = null; // the background brings this tab back to the front
+    done((p.candidates && p.candidates[0]) || null);
+  });
+
+  // ---------- edit an existing command chip ----------
+  const DATE_PRESETS = ['DDMMBBBB', 'DD/MM/BBBB', 'DD/MM/YYYY', 'YYYY-MM-DD', 'D MMMM BBBB', 'D MMM BB'];
+  const splitTime = (v, defUnit) => {
+    const m = String(v ?? '').trim().match(/^(\d+(?:\.\d+)?)\s*(ms|s)?$/i);
+    return m ? { amount: m[1], unit: (m[2] || defUnit).toLowerCase() } : null;
+  };
+  const isNo = (v) => /^(no|false|0|off)$/i.test(String(v ?? ''));
+  const isYesArg = (v) => /^(yes|true|1|on)$/i.test(String(v ?? ''));
+
+  /** Turn a parsed command back into the form values of its Dynamic command. */
+  const PARSERS = {
+    click: (a) => {
+      const d = splitTime(a.maxdelay, 'ms');
+      return {
+        by: a.text != null ? 'text' : 'selector', value: a.text ?? a.selector ?? a._[0] ?? '',
+        within: a.text != null ? (a.selector ?? '') : '', maxdelay: d ? d.amount : '', unit: d ? d.unit : 's',
+      };
+    },
+    select: (a) => {
+      const by = a.index != null ? 'index' : a.value != null ? 'value' : 'text';
+      return { selector: a.selector ?? '', by, value: a[by] ?? '' };
+    },
+    clear: (a) => ({ target: a.selector || a._[0] ? 'selector' : 'focused', selector: a.selector ?? a._[0] ?? '' }),
+    key: (a) => ({ key: (a.key ?? a._[0] ?? 'enter').toLowerCase() }),
+    wait: (a) => { const d = splitTime(a.delay ?? a._[0] ?? '500ms', 'ms'); return d ? { amount: d.amount, unit: d.unit } : {}; },
+    formtext: (a) => ({ name: a.name ?? '', default: a.default ?? '', cols: a.cols ?? '' }),
+    formparagraph: (a) => ({ name: a.name ?? '', default: a.default ?? '' }),
+    formmenu: (a) => ({ name: a.name ?? '', options: [a.default, ...a._].filter((x) => x != null && x !== '').join(', ') }),
+    thaiid: (a) => ({ prefix: a.prefix ?? a.first ?? '', format: a.format === 'dash' ? 'dash' : 'plain' }),
+    random: (a) => ({ min: a.min ?? '0', max: a.max ?? '100', kind: isNo(a.rounded) ? 'decimal' : 'whole' }),
+    import: (a) => ({ shortcut: a.shortcut ?? a._[0] ?? '' }),
+    thaiphone: (a) => ({
+      type: a.type === 'landline' ? 'landline' : 'mobile', format: a.format === 'dash' ? 'dash' : 'plain',
+      source: a.source === 'random' ? 'random' : 'list', prefix: a.prefix ?? '',
+    }),
+    thainame: (a) => ({
+      part: a.part ?? a._[0] ?? 'full', gender: a.gender ?? 'any', lang: a.lang === 'en' ? 'en' : 'th', title: isYesArg(a.title) ? 'yes' : 'no',
+    }),
+    email: (a) => ({ base: a.base ?? 'test', domain: a.domain ?? 'example.com' }),
+    date: (a) => {
+      const fmt = a.format ?? a._[0] ?? 'DD/MM/BBBB';
+      const v = DATE_PRESETS.includes(fmt) ? { format: fmt } : { format: 'custom', custom: fmt };
+      if (a.age) {
+        const [mn, mx] = String(a.age).split('-').map((x) => x.trim());
+        return { ...v, mode: 'age', ageMin: mn, ageMax: mx ?? mn };
+      }
+      const m = String(a.shift ?? '').trim().match(/^([+-]?)(\d+)\s*([dwmy])$/i);
+      if (m) return { ...v, mode: 'shift', dir: m[1] === '+' ? '+' : '-', amount: m[2], unit: m[3].toLowerCase() };
+      return { ...v, mode: 'today' };
+    },
+    zipcode: () => ({}),
+    bankaccount: (a) => ({ format: a.format === 'dash' ? 'dash' : 'plain', source: a.source === 'random' ? 'random' : 'list' }),
+    randomtext: (a) => ({ length: a.length ?? a._[0] ?? '8', type: a.type ?? 'alnum' }),
+  };
+
+  function editCommand(chip) {
+    const raw = chip.dataset.src;
+    const n = FB.tokenizeTemplate(raw)[0].node;
+    let def;
+    let vals;
+    if (n.type === 'assign') { def = COMMANDS.find((c) => c.id === 'var'); vals = { name: n.name, value: n.value.raw ?? '' }; }
+    else if (n.type === 'expr') { def = COMMANDS.find((c) => c.id === 'expr'); vals = { expr: n.expr }; }
+    else if (n.type === 'cmd') {
+      const id = n.name === 'random-number' ? 'random' : n.name;
+      def = COMMANDS.find((c) => c.id === id);
+      vals = def && PARSERS[id] ? PARSERS[id](n.args) : null;
+    }
+    if (!def || !vals) {
+      // No form for this command: edit it as code.
+      const at = ta.value.indexOf(raw);
+      setView('code');
+      ta.focus();
+      if (at !== -1) ta.setSelectionRange(at, at + raw.length);
+      return;
+    }
+    openCommand(def, {
+      vals,
+      apply: (text) => {
+        if (!chip.isConnected) return insertAtCursor(text);
+        const fresh = templateNodes(text);
+        chip.replaceWith(...fresh);
+        if (fresh.length) placeCaretAfter(fresh[fresh.length - 1]);
+        syncFromRich();
+      },
+    });
+  }
+
+  // Config view for one command: sections with title + description + control.
+  // edit = { vals, apply(text) } when changing an existing command chip.
+  function openCommand(c, edit) {
+    const panel = $('cmd-config');
+    for (const n of document.querySelectorAll('.commands > .cmd-search, .commands > .cmd-list, .commands > .cmd-footer')) n.hidden = true;
+    panel.hidden = false;
+
+    const val = (x, v) => (typeof x === 'function' ? x(v) : x);
+    const vals = {};
+    for (const f of c.fields) {
+      const opts = val(f.options, vals);
+      vals[f.key] = f.value ?? (opts && opts[0] ? opts[0][0] : '');
+    }
+    if (edit) for (const [k, v] of Object.entries(edit.vals)) if (v != null) vals[k] = String(v);
+    let showAdvanced = false;
+    let manualEdit = false;
+    let waiting = false;
+    const inputs = {};
+
+    const back = el('button', { type: 'button', className: 'icon-only ghost-btn', title: 'Back to commands' }, [FB.icon('back')]);
+    back.addEventListener('click', showList);
+    const head = el('div', { className: 'cfg-head' }, [back, FB.icon(c.icon), el('strong', { textContent: edit ? `Edit: ${c.title}` : c.title })]);
+    const body = el('div', { className: 'cfg-body' });
+    const out = el('code', { className: 'cmd-out' });
+    const err = el('p', { className: 'warn', hidden: true });
+    const cancel = el('button', { type: 'button', className: 'outline', textContent: 'Cancel' });
+    const ok = el('button', { type: 'button', className: 'primary' }, edit ? [FB.icon('check'), 'Update'] : [FB.icon('plus'), 'Insert']);
+    cancel.addEventListener('click', showList);
+    const foot = el('div', { className: 'cfg-foot' }, [el('div', { className: 'cfg-out-label muted', textContent: 'Will insert' }), out, err,
+      el('div', { className: 'fb-dialog-actions' }, [cancel, ok])]);
+    panel.replaceChildren(head, body, foot);
+
+    function control(f) {
+      const opts = val(f.options, vals);
+      let input;
+      if (f.type === 'select') {
+        input = el('select', {}, (opts || []).map(([v, label]) => el('option', { value: v, textContent: label })));
+        if (!opts || !opts.length) input.append(el('option', { value: '', textContent: '(nothing to choose)' }));
+        input.value = vals[f.key];
+        if (input.value !== vals[f.key]) vals[f.key] = input.value;
+        input.addEventListener('change', () => { vals[f.key] = input.value; render(); });
+      } else {
+        input = el('input', { type: val(f.type, vals) || 'text', value: vals[f.key] ?? '', className: f.mono ? 'mono' : '', spellcheck: false });
+        input.addEventListener('input', () => { vals[f.key] = input.value; updateOut(); });
+      }
+      inputs[f.key] = input;
+      return input;
+    }
+
+    function elementSection(f) {
+      const isText = vals.by === 'text';
+      const pickBtn = el('button', { type: 'button', className: 'pick-btn' }, [FB.icon('mouse'), waiting ? 'Waiting for your click…' : 'Select from website']);
+      pickBtn.disabled = waiting;
+      pickBtn.addEventListener('click', () => {
+        pickFromWebsite((cand) => {
+          waiting = false;
+          if (cand) {
+            if (cand.text != null && !cand.selector) { vals.by = 'text'; vals.value = cand.text; }
+            else { vals.by = 'selector'; vals.value = cand.selector; }
+          }
+          render();
+        }, () => { waiting = true; render(); });
+      });
+      const current = vals.value
+        ? el('code', { className: 'cfg-current', textContent: vals.value, title: vals.value })
+        : el('span', { className: 'muted', textContent: '(none)' });
+      const edit = el('button', { type: 'button', className: 'link-btn', textContent: manualEdit ? 'Done' : 'Manual edit' });
+      edit.addEventListener('click', () => { manualEdit = !manualEdit; render(); if (manualEdit) inputs[f.key].focus(); });
+      const input = control({ ...f, type: 'text', mono: true });
+      input.hidden = !manualEdit;
+      input.addEventListener('input', () => { current.textContent = input.value || '(none)'; });
+      const nodes = [
+        el('div', { className: 'cfg-title', textContent: f.label }),
+        el('p', { className: 'cfg-desc', textContent: val(f.desc, vals) }),
+        pickBtn,
+      ];
+      if (waiting) {
+        const stop = el('button', { type: 'button', className: 'link-btn', textContent: 'Cancel' });
+        stop.addEventListener('click', () => { cancelPick(); waiting = false; render(); });
+        nodes.push(el('p', { className: 'cfg-desc' }, ['Switch to any tab and click the element there. ', stop]));
+      }
+      nodes.push(el('div', { className: 'cfg-status' }, [el('span', { textContent: `${isText ? 'Text' : 'Selector'}: ` }), current, el('span', { className: 'spacer' }), edit]), input);
+      return el('section', { className: 'cfg-section' }, nodes);
+    }
+
+    function fieldSection(fields) {
+      const first = fields[0];
+      const desc = val(first.desc, vals);
+      const hint = val(first.hint, vals);
+      // Native <select>s become custom dropdowns (enhanced once they have a parent).
+      const ctrl = (f) => {
+        const input = control(f);
+        if (f.type !== 'select') return input;
+        const box = el('div', { className: 'fb-select-wrap' }, [input]);
+        FB.enhanceSelect(input);
+        return box;
+      };
+      const controls = fields.length > 1
+        ? el('div', { className: 'cf-row' }, fields.map((f) => el('label', { className: 'cf' }, [f.short || val(f.label, vals), ctrl(f)])))
+        : ctrl(first);
+      return el('section', { className: 'cfg-section' }, [
+        el('div', { className: 'cfg-title', textContent: val(first.label, vals) }),
+        ...(desc ? [el('p', { className: 'cfg-desc', textContent: desc })] : []),
+        controls,
+        ...(hint ? [el('span', { className: 'hint muted', textContent: hint })] : []),
+      ]);
+    }
+
+    function render() {
+      const sections = [];
+      const groups = [];
+      for (const f of c.fields) {
+        if (f.show && !f.show(vals)) continue;
+        if (f.advanced) continue;
+        const last = groups[groups.length - 1];
+        if (f.row && last && last[0].row === f.row) last.push(f);
+        else groups.push([f]);
+      }
+      for (const g of groups) sections.push(g[0].type === 'element' ? elementSection(g[0]) : fieldSection(g));
+      const adv = c.fields.filter((f) => f.advanced && (!f.show || f.show(vals)));
+      if (adv.length) {
+        const toggle = el('button', { type: 'button', className: 'adv-toggle' }, [FB.icon('chevron'), showAdvanced ? 'Hide advanced settings' : 'Show advanced settings']);
+        toggle.classList.toggle('open', showAdvanced);
+        toggle.addEventListener('click', () => { showAdvanced = !showAdvanced; render(); });
+        sections.push(toggle);
+        if (showAdvanced) for (const f of adv) sections.push(fieldSection([f]));
+      }
+      if (!sections.length) sections.push(el('section', { className: 'cfg-section' }, [el('p', { className: 'cfg-desc', textContent: `${c.desc}. Nothing to set up.` })]));
+      body.replaceChildren(...sections);
+      updateOut();
+    }
+
+    function missing() {
+      for (const f of c.fields) {
+        if (f.show && !f.show(vals)) continue;
+        const v = String(vals[f.key] ?? '').trim();
+        const label = val(f.label, vals);
+        if (f.required && !v) return { f, msg: f.type === 'element' ? 'Select an element on a web page, or use Manual edit.' : `${label} is required.` };
+        if (v && f.pattern && !f.pattern.test(v)) return { f, msg: f.patternMsg };
+        if (v && val(f.type, vals) === 'number' && Number.isNaN(Number(v))) return { f, msg: `${label} must be a number.` };
+      }
+      return null;
+    }
+
+    function updateOut() {
+      const m = missing();
+      out.textContent = m ? '…' : c.build(vals);
+      ok.disabled = !!m;
+      err.hidden = true;
+    }
+
+    ok.addEventListener('click', () => {
+      const m = missing();
+      if (m) {
+        err.textContent = m.msg;
+        err.hidden = false;
+        return;
+      }
+      const text = c.build(vals);
+      showList();
+      if (edit) edit.apply(text);
+      else insertAtCursor(text);
+    });
+
+    render();
+    const first = body.querySelector('input:not([hidden]), .fb-select, .pick-btn');
+    if (first) first.focus();
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !$('cmd-config').hidden && !document.querySelector('.fb-select-menu') && !document.querySelector('dialog[open]')) showList();
+  });
+
+  renderCommands();
+
 
   // ---------- settings ----------
   async function openSettings() {
@@ -518,7 +1589,10 @@
     $('s-step').value = s.stepDelay;
     $('s-timeout').value = s.timeout / 1000;
     $('s-volume').value = s.soundVolume;
+    $('s-phones').value = s.phoneAllow.join('\n');
+    $('s-banks').value = s.bankAllow.join('\n');
     showVolume();
+    showAllowCounts();
     $('settings').showModal();
   }
   function showVolume() {
@@ -531,10 +1605,20 @@
       stepDelay: Number($('s-step').value),
       timeout: Number($('s-timeout').value) * 1000,
       soundVolume: Number($('s-volume').value),
+      phoneAllow: $('s-phones').value,
+      bankAllow: $('s-banks').value,
     });
+    showAllowCounts();
+  }
+  function showAllowCounts() {
+    const n = (id, min, max) => FB.storage.normalizeSettings({ [id]: $(id === 'phoneAllow' ? 's-phones' : 's-banks').value })[id].length;
+    const p = n('phoneAllow'), b = n('bankAllow');
+    $('s-phones-count').textContent = p ? `(${p})` : '(empty: random)';
+    $('s-banks-count').textContent = b ? `(${b})` : '(empty: random)';
   }
   $('open-settings').addEventListener('click', openSettings);
-  for (const id of ['s-highlight', 's-step', 's-timeout', 's-volume']) $(id).addEventListener('change', saveSettingsFromForm);
+  for (const id of ['s-highlight', 's-step', 's-timeout', 's-volume', 's-phones', 's-banks']) $(id).addEventListener('change', saveSettingsFromForm);
+  for (const id of ['s-phones', 's-banks']) $(id).addEventListener('input', showAllowCounts);
   $('s-volume').addEventListener('input', showVolume);
   $('s-volume').addEventListener('change', () => FB.sound.trigger($('s-volume').value));
   $('s-volume-test').addEventListener('click', () => FB.sound.trigger($('s-volume').value));

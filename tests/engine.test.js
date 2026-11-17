@@ -7,6 +7,7 @@ require('../src/engine/thaiid.js');
 require('../src/engine/runner.js');
 const FB = globalThis.FastBlaze;
 
+const plain = (actions) => actions.map(({ src, ...rest }) => rest);
 const textOnly = (r) => r.actions.filter((a) => a.type === 'text').map((a) => a.value).join('');
 
 test('thai id: known checksum', () => {
@@ -85,7 +86,7 @@ test('compat: click + formtext + import flow', () => {
 
   const r = FB.compile(tpl, { lookup, formValues: { firstname_lead: 'สมชาย' } });
   assert.deepEqual(r.errors, []);
-  const a = r.actions;
+  const a = plain(r.actions);
   assert.deepEqual(a[0], { type: 'click', selector: '[data-testid="input-first-name"]' });
   assert.deepEqual(a[1], { type: 'text', value: 'สมชาย' });
   assert.deepEqual(a[2], { type: 'click', selector: '[data-testid="input-id-card-number"]' });
@@ -111,7 +112,7 @@ test('unknown command reports error', () => {
 test('clear and select commands compile to actions', () => {
   const r = FB.compile('{clear}{clear: selector=#a}{select: selector=#p; value=10}{select: selector=#p; text=เชียงใหม่}{select: selector=#p; index=2}');
   assert.deepEqual(r.errors, []);
-  assert.deepEqual(r.actions, [
+  assert.deepEqual(plain(r.actions), [
     { type: 'clear', selector: null },
     { type: 'clear', selector: '#a' },
     { type: 'select', selector: '#p', value: '10' },
@@ -125,7 +126,7 @@ test('clear and select commands compile to actions', () => {
 test('click by visible text', () => {
   const r = FB.compile('{click: text=บางรัก}{click: selector=.menu; text=สีลม}');
   assert.deepEqual(r.errors, []);
-  assert.deepEqual(r.actions, [
+  assert.deepEqual(plain(r.actions), [
     { type: 'click', selector: null, text: 'บางรัก' },
     { type: 'click', selector: '.menu', text: 'สีลม' },
   ]);
@@ -153,14 +154,15 @@ test('describeAction labels every action type', () => {
 test('settings are normalized and clamped', () => {
   require('../src/shared/defaults.js');
   require('../src/shared/storage.js');
-  assert.deepEqual(FB.storage.normalizeSettings(), { highlight: true, stepDelay: 60, timeout: 5000, soundVolume: 40 });
+  assert.deepEqual(FB.storage.normalizeSettings(), { highlight: true, stepDelay: 60, timeout: 5000, soundVolume: 40, phoneAllow: [], bankAllow: [] });
   assert.deepEqual(
     FB.storage.normalizeSettings({ highlight: false, stepDelay: -5, timeout: 'abc' }),
-    { highlight: false, stepDelay: 0, timeout: 5000, soundVolume: 40 },
+    { highlight: false, stepDelay: 0, timeout: 5000, soundVolume: 40, phoneAllow: [], bankAllow: [] },
   );
   assert.equal(FB.storage.normalizeSettings({ timeout: 999999 }).timeout, 60000);
   assert.equal(FB.storage.normalizeSettings({ soundVolume: 150 }).soundVolume, 100);
   assert.equal(FB.storage.normalizeSettings({ soundVolume: 0 }).soundVolume, 0);
+  assert.deepEqual(FB.storage.normalizeSettings({ phoneAllow: '081-111-1111\n0811111111, 12, 021234567' }).phoneAllow, ['0811111111', '021234567']);
 });
 
 test('formmenu options and thaiid command', () => {
@@ -169,4 +171,47 @@ test('formmenu options and thaiid command', () => {
   assert.equal(textOnly(FB.compile(tpl, { formValues: { title: 'Ms' } })), 'Ms');
   assert.ok(FB.validateThaiId(textOnly(FB.compile('{thaiid}'))));
   assert.match(textOnly(FB.compile('{thaiid: prefix=1; format=dash}')), /^1-\d{4}-/);
+});
+
+test('line continuation: "\" + newline (+ indent) is ignored', () => {
+  const r = FB.compile('{a=2}\\\n  {b=3}\\\n{=a*b} ok\\\n!');
+  assert.deepEqual(r.errors, []);
+  assert.equal(textOnly(r), '6 ok!');
+  // a backslash not followed by a newline is still an escape
+  assert.equal(textOnly(FB.compile('a\\{b')), 'a{b');
+});
+
+test('tokenizer covers the source exactly and classifies blocks', () => {
+  const src = '{click: selector=#a}hi \\{x\\}{formtext: name=n}{thaiid}{import: /id}{v=1}{=v}{bogus}\\\n{wait: 1s}';
+  const toks = FB.tokenizeTemplate(src);
+  assert.equal(toks.map((t) => t.text).join(''), src);
+  const kinds = toks.map((t) => t.kind);
+  assert.deepEqual(kinds, ['action', 'text', 'escape', 'text', 'escape', 'form', 'data', 'import', 'expr', 'expr', 'unknown', 'cont', 'action']);
+});
+
+test('format puts one command per line and runs identically', () => {
+  const src = '{click: selector=[data-testid="a"]}abc{click: selector=.x}{formtext: name=n; default=d}{d1=8}{d2=1}{=d1+d2} tail';
+  const formatted = FB.formatTemplate(src);
+  assert.match(formatted, /\\\n\{click: selector=\.x\}/);
+  assert.equal(formatted.split('\n').length, 6);
+  assert.deepEqual(plain(FB.compile(formatted).actions), plain(FB.compile(src).actions));
+  assert.equal(FB.compactTemplate(formatted), src);
+  assert.equal(FB.formatTemplate(formatted), formatted); // idempotent
+  // wait / key stay on the same line as the previous step
+  assert.equal(FB.formatTemplate('{click: selector=#a}{wait: 1s}{click: selector=#b}{key: enter}'), '{click: selector=#a}{wait: 1s}\\\n{click: selector=#b}{key: enter}');
+  // plain sentence with a field is not broken up
+  assert.equal(FB.formatTemplate('Hello {formtext: name=x} bye'), 'Hello {formtext: name=x} bye');
+});
+
+test('actions remember their source range', () => {
+  const src = 'ab{click: selector=#x}{import: /t}';
+  const r = FB.compile(src, { lookup: () => 'T{=1+1}' });
+  assert.deepEqual(r.actions.map((a) => src.slice(a.src.start, a.src.end)), ['ab', '{click: selector=#x}', '{import: /t}']);
+});
+
+test('click maxdelay sets a per-step timeout', () => {
+  const r = FB.compile('{click: selector=#a; maxdelay=3s}{click: text=OK; maxdelay=750ms}{click: selector=#b}');
+  assert.deepEqual(r.errors, []);
+  assert.deepEqual(r.actions.map((a) => a.timeout), [3000, 750, undefined]);
+  assert.match(FB.compile('{click: selector=#a; maxdelay=soon}').errors[0], /Bad delay/);
 });

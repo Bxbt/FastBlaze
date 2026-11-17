@@ -52,6 +52,20 @@
     thaiid(a) {
       return FB.generateThaiId({ prefix: a.prefix ?? a.first ?? a._[0], format: a.format });
     },
+    // ---- test data (generators.js) ----
+    thaiphone(a, ctx) {
+      return FB.gen.phone({ type: a.type, prefix: a.prefix, format: a.format, source: a.source, allow: ctx.testData.phones });
+    },
+    thainame(a) {
+      return FB.gen.name({ part: a.part ?? a._[0], gender: a.gender, lang: a.lang, title: isYes(a.title, false) });
+    },
+    email(a) { return FB.gen.email({ base: a.base, domain: a.domain }); },
+    date(a, ctx) {
+      return FB.gen.date({ format: a.format ?? a._[0], shift: a.shift, age: a.age, now: ctx.now });
+    },
+    zipcode() { return FB.gen.zipcode(); },
+    bankaccount(a, ctx) { return FB.gen.bankAccount({ format: a.format, source: a.source, allow: ctx.testData.banks }); },
+    randomtext(a) { return FB.gen.randomText({ length: a.length ?? a._[0], type: a.type }); },
     formtext(a, ctx) { return formValue(a, ctx, 'text'); },
     formparagraph(a, ctx) { return formValue(a, ctx, 'paragraph'); },
     formmenu(a, ctx) { return formValue(a, ctx, 'menu'); },
@@ -67,7 +81,7 @@
           runTemplate(text, ctx);
           return '';
         }
-        const sub = { ...ctx, actions: [] };
+        const sub = { ...ctx, actions: [], nested: true };
         runTemplate(text, sub);
         ctx.fieldCounter = sub.fieldCounter;
         return sub.actions.filter((x) => x.type === 'text').map((x) => x.value).join('');
@@ -76,11 +90,14 @@
       }
     },
     // {click: selector=CSS} or {click: text=Label} (optionally both: text inside selector scope)
+    // maxdelay=5s overrides how long to wait for the element (default: Settings).
     click(a, ctx, emit) {
       const selector = a.selector ?? a._[0] ?? null;
       const text = a.text ?? null;
       if (!selector && !text) throw new Error('click needs selector= or text=');
-      if (emit) ctx.actions.push(text != null ? { type: 'click', selector, text } : { type: 'click', selector });
+      const action = text != null ? { type: 'click', selector, text } : { type: 'click', selector };
+      if (a.maxdelay != null && a.maxdelay !== '') action.timeout = parseDelay(a.maxdelay);
+      if (emit) ctx.actions.push(action);
       return '';
     },
     wait(a, ctx, emit) {
@@ -140,7 +157,7 @@
   }
 
   function textOf(template, ctx) {
-    const sub = { ...ctx, actions: [], fields: null };
+    const sub = { ...ctx, actions: [], fields: null, nested: true };
     runTemplate(template, sub);
     return sub.actions.filter((x) => x.type === 'text').map((x) => x.value).join('');
   }
@@ -166,7 +183,9 @@
   }
 
   function runTemplate(template, ctx) {
+    const top = ctx.depth === 0 && !ctx.nested;
     for (const node of FB.parseTemplate(template)) {
+      const before = ctx.actions.length;
       try {
         switch (node.type) {
           case 'text': emitText(ctx, node.value); break;
@@ -177,6 +196,12 @@
       } catch (err) {
         ctx.errors.push(`${node.raw || node.type}: ${err.message}`);
       }
+      // Remember which part of the source produced each action (editor navigation).
+      if (top) {
+        for (let i = before; i < ctx.actions.length; i++) {
+          if (!ctx.actions[i].src) ctx.actions[i].src = { start: node.start, end: node.end };
+        }
+      }
     }
   }
 
@@ -184,8 +209,10 @@
     const out = [];
     for (const a of actions) {
       const last = out[out.length - 1];
-      if (a.type === 'text' && last && last.type === 'text') last.value += a.value;
-      else out.push({ ...a });
+      if (a.type === 'text' && last && last.type === 'text') {
+        last.value += a.value;
+        if (last.src && a.src) last.src = { start: last.src.start, end: a.src.end };
+      } else out.push({ ...a });
     }
     return out;
   }
@@ -200,6 +227,8 @@
       fields: opts.collect ? [] : null,
       fieldCounter: 0,
       depth: 0,
+      now: opts.now || null,
+      testData: opts.testData || {}, // { phones: [], banks: [] } allow lists from Settings
     };
   }
 

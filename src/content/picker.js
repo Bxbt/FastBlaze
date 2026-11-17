@@ -47,8 +47,10 @@
     return session && e.composedPath().includes(session.host);
   }
 
-  function start() {
+  // opts.returnTo: picked for the Manage page; send the result back instead of showing the panel.
+  function start(opts) {
     if (session) return;
+    opts = opts || {};
     closeResult();
     const { host, root } = FB.ui.mount();
     const style = document.createElement('style');
@@ -60,7 +62,7 @@
     bar.innerHTML = 'Click an element &nbsp;·&nbsp; <kbd>↑</kbd> parent <kbd>↓</kbd> child &nbsp;·&nbsp; <kbd>Esc</kbd> cancel';
     box.hidden = tip.hidden = true;
     root.append(box, tip, bar);
-    session = { host, box, tip, current: null, trail: [] };
+    session = { host, box, tip, current: null, trail: [], returnTo: !!opts.returnTo };
 
     window.addEventListener('mousemove', onMove, true);
     window.addEventListener('keydown', onKey, true);
@@ -90,9 +92,20 @@
     session.box.hidden = session.tip.hidden = false;
   }
 
+  // elementFromPoint stops at shadow hosts; keep descending into open shadow roots.
+  function deepElementFromPoint(x, y) {
+    let el = document.elementFromPoint(x, y);
+    while (el && el.shadowRoot) {
+      const inner = el.shadowRoot.elementFromPoint(x, y);
+      if (!inner || inner === el) break;
+      el = inner;
+    }
+    return el;
+  }
+
   function onMove(e) {
     if (isOurs(e)) return;
-    const el = document.elementFromPoint(e.clientX, e.clientY);
+    const el = deepElementFromPoint(e.clientX, e.clientY);
     if (el && el !== session.current && el !== session.host) setCurrent(el);
   }
 
@@ -115,7 +128,7 @@
     if (isOurs(e)) return;
     e.preventDefault();
     e.stopImmediatePropagation();
-    if (e.type === 'click') pick(session.current || e.target);
+    if (e.type === 'click') pick(session.current || deepElementFromPoint(e.clientX, e.clientY) || e.target);
   }
 
   // ---- result panel ----
@@ -127,6 +140,7 @@
   }
 
   async function pick(el) {
+    const returnTo = session && session.returnTo;
     stop();
     const cands = FB.selector.candidates(el);
     const commands = cands.map((c) => FB.selector.toCommand(c, el));
@@ -136,9 +150,18 @@
         await navigator.clipboard.writeText(commands[0]);
         copied = true;
       } catch { /* clipboard needs focus; the Copy buttons still work */ }
-      chrome.storage.local.set({ [LAST_PICK_KEY]: { command: commands[0], commands, url: location.href, at: Date.now() } });
+      chrome.storage.local.set({
+        [LAST_PICK_KEY]: {
+          command: commands[0], commands, url: location.href, at: Date.now(),
+          candidates: cands.map((c) => ({ selector: c.selector ?? null, text: c.text ?? null, stability: c.stability, kind: c.kind })),
+        },
+      });
     }
     FB.ui.flash(el, 900);
+    if (returnTo) {
+      FB.ui.toast(cands.length ? 'Element sent to FastBlaze' : 'No reliable selector for this element', cands.length ? '' : 'error');
+      return;
+    }
     showResult(el, cands, commands, copied);
   }
 

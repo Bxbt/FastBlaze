@@ -8,6 +8,8 @@
     stepDelay: 60, // ms pause after each click / key
     timeout: 5000, // ms to wait for an element to appear
     soundVolume: 40, // 0-100 key-click sound when a snippet runs (0 = off)
+    phoneAllow: [], // team-owned phone numbers {thaiphone} picks from (safe mode)
+    bankAllow: [], // team-owned bank accounts {bankaccount} picks from
   };
 
   FB.DEFAULT_DATA = {
