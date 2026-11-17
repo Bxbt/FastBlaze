@@ -1,6 +1,6 @@
 # FastBlaze Roadmap
 
-สถานะ: v0.1 ใช้งานได้ (snippet, Thai ID, autoclick + highlight เหลือง, import/export Text Blaze)
+สถานะ: v0.2 — Phase 1 เสร็จ (flow เสถียร, settings, logo)
 ลำดับด้านล่างเรียงตาม "คุ้มค่า / แรงที่ใช้" — ทำทีละ phase, แต่ละ phase ใช้งานได้จริงเมื่อจบ
 
 ---
@@ -9,12 +9,13 @@
 
 ปัญหาที่จะเจอจริงบนเว็บ Ufriend ก่อนเรื่อง UI
 
-- [ ] **บอกว่าพังที่ขั้นไหน** — toast แสดง `Step 14/26: click .overflow-auto > :nth-child(1) not found` แทนข้อความรวม
-- [ ] **ปุ่มหยุด / กด Esc ยกเลิก flow** ระหว่างรัน + แถบ progress มุมจอ
-- [ ] **`{clear}`** — ล้างค่าในช่องก่อนพิมพ์ (ตอนนี้ต่อท้ายค่าเดิม เหมือน Text Blaze)
-- [ ] **`{select: selector=...; value=...}`** — รองรับ `<select>` ธรรมดา
-- [ ] **Settings**: เปิด/ปิด highlight, ความเร็วต่อ step, timeout รอ element
-- [ ] Highlight สีแดงที่ element สุดท้ายเมื่อ flow พัง
+- [x] **บอกว่าพังที่ขั้นไหน** — toast แสดง `Step 14/26: click .overflow-auto > :nth-child(1)` + สาเหตุ
+- [x] **ปุ่มหยุด / กด Esc ยกเลิก flow** ระหว่างรัน + แถบ progress มุมซ้ายล่าง
+- [x] **`{clear}`** — ล้างค่าในช่องก่อนพิมพ์ (ตอนนี้ต่อท้ายค่าเดิม เหมือน Text Blaze)
+- [x] **`{select: selector=...; value=...}`** — รองรับ `<select>` ธรรมดา (value / text / index)
+- [x] **Settings**: เปิด/ปิด highlight, ความเร็วต่อ step, timeout รอ element
+- [x] Highlight สีแดงที่ element ที่พังเมื่อ flow ล้ม
+- [x] Logo + icon 16/32/48/128
 
 ## Phase 2 — Editor อ่านง่าย (~1 วัน)
 

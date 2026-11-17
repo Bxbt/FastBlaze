@@ -9,14 +9,27 @@
 </head>
 <body>
   <header class="top">
+    <img src="../../icons/icon-48.png" alt="" width="28" height="28">
     <strong class="brand">FastBlaze</strong>
     <div class="spacer"></div>
     <button id="new-folder">+ Folder</button>
     <button id="new-snippet" class="primary">+ Snippet</button>
     <button id="import">Import JSON</button>
     <button id="export">Export JSON</button>
+    <button id="open-settings" title="Settings">⚙ Settings</button>
     <input id="import-file" type="file" accept=".json,application/json" hidden>
   </header>
+
+  <dialog id="settings">
+    <form method="dialog" class="settings-form">
+      <h3>Settings</h3>
+      <label class="check"><input type="checkbox" id="s-highlight"> Highlight clicked elements (yellow)</label>
+      <label>Pause after each click / key (ms)<input type="number" id="s-step" min="0" max="5000" step="10"></label>
+      <label>Wait for element up to (seconds)<input type="number" id="s-timeout" min="0.5" max="60" step="0.5"></label>
+      <p class="muted">Saved automatically. Applies to new runs on all tabs.</p>
+      <div class="row"><div class="spacer"></div><button class="primary" value="close">Done</button></div>
+    </form>
+  </dialog>
 
   <div class="layout">
     <aside>
@@ -66,6 +79,8 @@
           <tr><td><code>{formtext: name=first; default=ทดสอบ}</code></td><td>Ask before inserting. Also <code>{formmenu: default=A; B; C; name=x}</code>, <code>{formparagraph}</code></td></tr>
           <tr><td><code>{import: /id}</code></td><td>Insert another snippet</td></tr>
           <tr><td><code>{click: selector=[data-testid="x"]}</code></td><td>Wait (up to 5s) for a visible element, click it; text after it types into the focused field</td></tr>
+          <tr><td><code>{clear}</code> <code>{clear: selector=…}</code></td><td>Empty the focused field (or the matched field) before typing</td></tr>
+          <tr><td><code>{select: selector=…; value=10}</code></td><td>Pick an option in a native &lt;select&gt; by <code>value=</code>, <code>text=</code> or <code>index=</code></td></tr>
           <tr><td><code>{wait: 500ms}</code> <code>{key: enter}</code></td><td>Pause; press enter / tab / escape / up / down / space / backspace</td></tr>
           <tr><td><code>\{</code> <code>\\</code></td><td>Literal brace / backslash</td></tr>
         </table>

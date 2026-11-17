@@ -59,6 +59,27 @@
     el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: text ? 'insertText' : 'deleteContentBackward', data: text || null }));
   }
 
+  /** Value + caret of a text field (null for contenteditable). */
+  function snapshot(el) {
+    return isTextField(el) ? { value: el.value, caret: caret(el) } : null;
+  }
+
+  /** Put a text field back to a snapshot, firing input events so frameworks see it. */
+  function restoreValue(el, snap) {
+    if (el.value !== snap.value) {
+      el.focus({ preventScroll: true });
+      el.select();
+      const ok = snap.value ? document.execCommand('insertText', false, snap.value) : document.execCommand('delete');
+      if (!ok || el.value !== snap.value) {
+        setNativeValue(el, snap.value);
+        el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'deleteContentBackward' }));
+      }
+    }
+    if (snap.caret) {
+      try { el.setSelectionRange(snap.caret.start, snap.caret.end); } catch { /* not supported */ }
+    }
+  }
+
   function deleteBeforeCaret(el, count) {
     if (isTextField(el)) {
       const c = caret(el);
@@ -102,14 +123,71 @@
     return null;
   }
 
-  async function waitForElement(selector, timeout) {
+  class Cancelled extends Error {
+    constructor() {
+      super('Stopped');
+      this.name = 'Cancelled';
+    }
+  }
+
+  // Sleep that wakes up early when the run is cancelled.
+  async function pause(ms, run) {
+    const until = Date.now() + ms;
+    for (;;) {
+      if (run && run.cancelled) throw new Cancelled();
+      const left = until - Date.now();
+      if (left <= 0) return;
+      await sleep(Math.min(50, left));
+    }
+  }
+
+  async function waitForElement(selector, timeout, run) {
     const until = Date.now() + timeout;
     for (;;) {
+      if (run && run.cancelled) throw new Cancelled();
       const el = findElement(selector);
       if (el) return el;
-      if (Date.now() > until) throw new Error(`Element not found: ${selector}`);
+      if (Date.now() > until) throw new Error(`Element not found after ${timeout / 1000}s: ${selector}`);
       await sleep(50);
     }
+  }
+
+  function clearField(el) {
+    if (!isEditable(el)) throw new Error('Not a text field (nothing to clear)');
+    el.focus({ preventScroll: true });
+    if (isTextField(el)) {
+      if (!el.value) return;
+      el.select();
+      if (!document.execCommand('delete') || el.value) {
+        setNativeValue(el, '');
+        el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'deleteContentBackward' }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      return;
+    }
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    document.execCommand('delete');
+  }
+
+  function selectOption(el, a) {
+    if (el.tagName !== 'SELECT') throw new Error(`Not a <select> (found <${el.tagName.toLowerCase()}>)`);
+    const opts = [...el.options];
+    let opt;
+    if (a.index != null) opt = opts[a.index];
+    else if (a.text != null) opt = opts.find((o) => o.text.trim() === a.text);
+    else opt = opts.find((o) => o.value === a.value) || opts.find((o) => o.text.trim() === a.value);
+    if (!opt) {
+      const list = opts.slice(0, 8).map((o) => `"${o.text.trim()}"`).join(', ');
+      throw new Error(`Option not found. Available: ${list}${opts.length > 8 ? ', …' : ''}`);
+    }
+    el.focus({ preventScroll: true });
+    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(el, opt.value);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
   }
 
   function simulateClick(el) {
@@ -183,31 +261,77 @@
     }
   }
 
-  /** Run compiled actions. Text goes into whatever element has focus. */
+  /**
+   * Run compiled actions. Text goes into whatever element has focus.
+   * opts: { run: { cancelled }, timeout, stepDelay, highlight, onStep(i, n, action) }
+   * Failures throw an Error whose message names the step; err.element is the element involved (if any).
+   */
   async function execute(actions, opts) {
     opts = opts || {};
+    const run = opts.run || { cancelled: false };
     const timeout = opts.timeout ?? 5000;
     const stepDelay = opts.stepDelay ?? 60;
     const automation = actions.some((a) => a.type !== 'text');
-    for (const a of actions) {
-      if (a.type === 'text') typeText(a.value, automation);
-      else if (a.type === 'click') {
-        const el = await waitForElement(a.selector, timeout);
-        el.scrollIntoView({ block: 'center', inline: 'nearest' });
-        if (opts.highlight !== false && FB.ui) FB.ui.flash(el);
-        simulateClick(el);
-        await sleep(stepDelay);
-      } else if (a.type === 'wait') await sleep(a.ms);
-      else if (a.type === 'key') {
-        pressKey(a.key);
-        await sleep(stepDelay);
+    const mark = (el) => {
+      el.scrollIntoView({ block: 'center', inline: 'nearest' });
+      if (opts.highlight !== false && FB.ui) FB.ui.flash(el);
+    };
+
+    for (let i = 0; i < actions.length; i++) {
+      const a = actions[i];
+      if (run.cancelled) throw new Cancelled();
+      if (opts.onStep) opts.onStep(i, actions.length, a);
+      let el = null;
+      try {
+        switch (a.type) {
+          case 'text':
+            el = deepActiveElement();
+            typeText(a.value, automation);
+            break;
+          case 'click':
+            el = await waitForElement(a.selector, timeout, run);
+            mark(el);
+            simulateClick(el);
+            await pause(stepDelay, run);
+            break;
+          case 'wait':
+            await pause(a.ms, run);
+            break;
+          case 'key':
+            el = deepActiveElement();
+            pressKey(a.key);
+            await pause(stepDelay, run);
+            break;
+          case 'clear':
+            if (a.selector) {
+              el = await waitForElement(a.selector, timeout, run);
+              mark(el);
+            } else el = deepActiveElement();
+            clearField(el);
+            break;
+          case 'select':
+            el = await waitForElement(a.selector, timeout, run);
+            mark(el);
+            selectOption(el, a);
+            await pause(stepDelay, run);
+            break;
+          default:
+            throw new Error(`Unknown action "${a.type}"`);
+        }
+      } catch (err) {
+        if (err instanceof Cancelled) throw err;
+        const label = FB.describeAction ? FB.describeAction(a) : a.type;
+        const wrapped = new Error(`Step ${i + 1}/${actions.length}: ${label}\n→ ${err.message}`);
+        wrapped.step = i;
+        wrapped.element = el && el !== document.body && isVisible(el) ? el : null;
+        throw wrapped;
       }
     }
   }
 
   FB.dom = {
-    isEditable, deepActiveElement, textBeforeCaret, deleteBeforeCaret,
+    isEditable, deepActiveElement, textBeforeCaret, deleteBeforeCaret, snapshot, restoreValue,
     insertText, typeText, findElement, waitForElement, simulateClick, pressKey,
-    saveSelection, restoreSelection, execute, sleep,
+    clearField, selectOption, saveSelection, restoreSelection, execute, sleep, Cancelled,
   };
 })();

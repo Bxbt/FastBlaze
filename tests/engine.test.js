@@ -108,6 +108,39 @@ test('unknown command reports error', () => {
   assert.equal(r.errors.length, 1);
 });
 
+test('clear and select commands compile to actions', () => {
+  const r = FB.compile('{clear}{clear: selector=#a}{select: selector=#p; value=10}{select: selector=#p; text=เชียงใหม่}{select: selector=#p; index=2}');
+  assert.deepEqual(r.errors, []);
+  assert.deepEqual(r.actions, [
+    { type: 'clear', selector: null },
+    { type: 'clear', selector: '#a' },
+    { type: 'select', selector: '#p', value: '10' },
+    { type: 'select', selector: '#p', text: 'เชียงใหม่' },
+    { type: 'select', selector: '#p', index: 2 },
+  ]);
+  assert.match(FB.compile('{select: selector=#p}').errors[0], /value=, text= or index=/);
+  assert.match(FB.compile('{select: value=1}').errors[0], /selector=/);
+});
+
+test('describeAction labels every action type', () => {
+  assert.equal(FB.describeAction({ type: 'click', selector: '#x' }), 'click #x');
+  assert.equal(FB.describeAction({ type: 'clear', selector: null }), 'clear focused field');
+  assert.equal(FB.describeAction({ type: 'select', selector: '#p', text: 'A' }), 'select "A" in #p');
+  assert.equal(FB.describeAction({ type: 'wait', ms: 500 }), 'wait 500 ms');
+  assert.equal(FB.describeAction({ type: 'text', value: 'x'.repeat(50) }).length, 48);
+});
+
+test('settings are normalized and clamped', () => {
+  require('../src/shared/defaults.js');
+  require('../src/shared/storage.js');
+  assert.deepEqual(FB.storage.normalizeSettings(), { highlight: true, stepDelay: 60, timeout: 5000 });
+  assert.deepEqual(
+    FB.storage.normalizeSettings({ highlight: false, stepDelay: -5, timeout: 'abc' }),
+    { highlight: false, stepDelay: 0, timeout: 5000 },
+  );
+  assert.equal(FB.storage.normalizeSettings({ timeout: 999999 }).timeout, 60000);
+});
+
 test('formmenu options and thaiid command', () => {
   const tpl = '{formmenu: default=Mr; Mrs; Ms; name=title}';
   assert.deepEqual(FB.collectFields(tpl)[0].options, ['Mr', 'Mrs', 'Ms']);

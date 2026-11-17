@@ -15,10 +15,15 @@ After editing code: click ↻ on the extension card, then reload the page.
 
 ## Use
 
-- Type a shortcut (e.g. `/lead`) in any field → expands.
+- Type a shortcut (e.g. `/lead`) in any field → expands. Works even in fields that
+  reject `/` or letters (digit-only, masked, `type=number`): keystrokes are tracked
+  and the field is restored to its value before the shortcut.
 - Popup (`Alt+Shift+F`): search + run a snippet on the current page,
   generate/copy a Thai test ID.
-- Options page: edit snippets, live preview of the action list, import/export.
+- Options page: edit snippets, live preview of the action list, import/export,
+  ⚙ Settings (highlight on/off, pause per step, element timeout).
+- Running a flow shows a progress panel (bottom-left). **Esc** or **Stop** cancels.
+  Failures name the step (`Step 14/26: click …`) and flash the element red.
 
 ## Template syntax
 
@@ -31,6 +36,8 @@ After editing code: click ↻ on the extension card, then reload the page.
 | `{formtext: name=a; default=b}` `{formmenu: default=A; B; name=m}` `{formparagraph}` | Ask before insert |
 | `{import: /id}` | Insert another snippet |
 | `{click: selector=CSS}` | Wait ≤5s for visible element, click; following text types into focus |
+| `{clear}` / `{clear: selector=CSS}` | Empty focused (or matched) field before typing |
+| `{select: selector=CSS; value=10}` | Native `<select>` by `value=`, `text=` or `index=` |
 | `{wait: 500ms}` `{key: enter\|tab\|escape\|up\|down}` | Pause / key press |
 | `\{` `\\` | Literal brace / backslash |
 

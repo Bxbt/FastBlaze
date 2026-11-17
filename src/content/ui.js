@@ -27,6 +27,19 @@
       background: rgba(250, 204, 21, .35); outline: 3px solid #facc15;
       box-shadow: 0 0 0 4px rgba(250, 204, 21, .35); transition: opacity .3s ease; }
     .flash.out { opacity: 0; }
+    .flash.error { background: rgba(239, 68, 68, .25); outline-color: #ef4444; box-shadow: 0 0 0 4px rgba(239, 68, 68, .3); }
+    .progress { position: fixed; left: 16px; bottom: 16px; width: 320px; max-width: calc(100vw - 32px);
+      background: #0f172a; color: #e2e8f0; border-radius: 12px; padding: 10px 12px; font-size: 12px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.3); z-index: 2147483647; }
+    .p-head { display: flex; align-items: center; gap: 8px; }
+    .p-head strong { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+    .p-count { color: #94a3b8; font-variant-numeric: tabular-nums; }
+    .p-stop { background: #334155; border: none; color: #fff; padding: 3px 9px; font-size: 12px; border-radius: 6px; }
+    .p-stop:hover { background: #ef4444; }
+    .p-bar { height: 4px; background: #1e293b; border-radius: 2px; margin: 8px 0 6px; overflow: hidden; }
+    .p-fill { height: 100%; width: 0; background: linear-gradient(90deg, #f97316, #facc15); transition: width .15s; }
+    .p-label { color: #94a3b8; font-family: ui-monospace, Menlo, monospace; font-size: 11px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   `;
 
   function mount() {
@@ -99,11 +112,11 @@
   }
 
   /** Yellow overlay over an element (does not touch the page's own styles). */
-  function flash(target, ms) {
+  function flash(target, ms, kind) {
     const r = target.getBoundingClientRect();
     if (!r.width && !r.height) return;
     const { host, root } = mount();
-    const box = el('div', { className: 'flash' });
+    const box = el('div', { className: `flash ${kind || ''}` });
     Object.assign(box.style, {
       left: `${r.left - 3}px`, top: `${r.top - 3}px`, width: `${r.width + 6}px`, height: `${r.height + 6}px`,
     });
@@ -118,5 +131,28 @@
     setTimeout(() => host.remove(), ms ?? (kind === 'error' ? 6000 : 2500));
   }
 
-  FB.ui = { showForm, toast, flash };
+  /** Bottom-left run panel with step counter and a Stop button. */
+  function progress(title, onStop) {
+    const { host, root } = mount();
+    const count = el('span', { className: 'p-count' });
+    const fill = el('div', { className: 'p-fill' });
+    const label = el('div', { className: 'p-label' });
+    const stop = el('button', { type: 'button', className: 'p-stop', textContent: 'Stop (Esc)' });
+    stop.addEventListener('click', onStop);
+    root.appendChild(el('div', { className: 'progress' }, [
+      el('div', { className: 'p-head' }, [el('strong', { textContent: `⚡ ${title}` }), count, stop]),
+      el('div', { className: 'p-bar' }, [fill]),
+      label,
+    ]));
+    return {
+      update(i, n, text) {
+        count.textContent = `${i + 1}/${n}`;
+        fill.style.width = `${((i + 1) / n) * 100}%`;
+        label.textContent = text;
+      },
+      close() { host.remove(); },
+    };
+  }
+
+  FB.ui = { showForm, toast, flash, progress };
 })();
