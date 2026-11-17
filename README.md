@@ -79,7 +79,8 @@ After editing code: click ↻ on the extension card, then reload the page.
 | `{thainame}` / `{thainame: part=first; gender=male; lang=en; title=yes}` | Thai (or romanized) first / last / full name, optional นาย / นางสาว |
 | `{email}` / `{email: base=qa; domain=example.com}` | Unique test address (default `example.com`, never delivers) |
 | `{date}` / `{date: age=20-40; format=DDMMBBBB}` / `{date: shift=-3d}` | Today, shifted, or random birthday for an age range. Tokens: `BBBB`/`BB` พ.ศ., `YYYY`/`YY` ค.ศ., `MMMM`/`MMM` Thai month, `MM`, `DD` |
-| `{zipcode}` `{bankaccount: format=dash}` `{randomtext: length=8; type=digits}` | Thai postal code, 10-digit account, random text |
+| `{zipcode}` / `{zipcode: province=ขอนแก่น}` / `{zipcode: prefix=11}` | A **real** Thai postal code (964 codes from [kongvut/thai-province-data](https://github.com/kongvut/thai-province-data), MIT) |
+| `{bankaccount: format=dash}` `{randomtext: length=8; type=digits}` | 10-digit account, random text |
 | `{x=5}` `{y={random-number: min=1; max=9}}` | Variables |
 | `{=x*2 + floor(y/3)}` | Expression (`& ` joins text) |
 | `{formtext: name=a; default=b}` `{formmenu: default=A; B; name=m}` `{formparagraph}` | Ask before insert |

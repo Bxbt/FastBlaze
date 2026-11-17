@@ -92,12 +92,27 @@
   }
 
   // ---- zip code / bank account ---------------------------------------------------
-  const ZIP_PREFIXES = [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 30, 31, 32, 33, 34, 35, 36,
-    37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 60, 61, 62, 63, 64, 65, 66, 67,
-    70, 71, 72, 73, 74, 75, 76, 77, 80, 81, 82, 83, 84, 85, 86, 90, 91, 92, 93, 94, 95, 96];
-
-  function zipcode() {
-    return `${pick(ZIP_PREFIXES)}${pick(['000', '110', '120', '130', '140', '150', '160', '170', '180', '190', '210', '220'])}`;
+  /**
+   * A real Thai postal code (from FB.THAI_ZIPCODES, see thai-zipcodes.js).
+   * opts.province: Thai or English province name (e.g. ขอนแก่น / Khon Kaen); opts.prefix: leading digits.
+   */
+  function zipcode(opts) {
+    opts = opts || {};
+    const table = FB.THAI_ZIPCODES || [];
+    let rows = table;
+    if (opts.province) {
+      const want = String(opts.province).trim().toLowerCase().replace(/^(จังหวัด|จ\.)\s*/, '');
+      rows = table.filter(([th, en]) => th.toLowerCase() === want || en.toLowerCase() === want);
+      if (!rows.length) throw new Error(`Unknown province "${opts.province}"`);
+    }
+    let codes = rows.flatMap((r) => r[2].split(' '));
+    if (opts.prefix) {
+      const pre = String(opts.prefix).replace(/\D/g, '');
+      codes = codes.filter((c) => c.startsWith(pre));
+      if (!codes.length) throw new Error(`No real postal code starts with ${pre}`);
+    }
+    if (!codes.length) throw new Error('Postal code list is not loaded');
+    return pick([...new Set(codes)]);
   }
 
   function bankAccount(opts) {

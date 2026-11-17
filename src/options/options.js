@@ -565,7 +565,7 @@
       case 'thainame': parts = [['name', [a.part ?? a._[0], a.gender, a.lang === 'en' ? 'EN' : '', a.title === 'yes' ? 'title' : ''].filter(Boolean).join(' · ') || 'full']]; break;
       case 'email': parts = [['email', a.domain ?? 'example.com']]; break;
       case 'date': parts = [['date', a.age ? `age ${a.age}` : a.shift ? a.shift : 'today'], P('format', a.format ?? a._[0])]; break;
-      case 'zipcode': parts = [['zip code', '']]; break;
+      case 'zipcode': parts = [['zip code', a.province ?? a._[0] ?? '']]; break;
       case 'bankaccount': parts = [['bank account', a.source === 'random' ? 'random' : 'allow list']]; break;
       case 'randomtext': parts = [['text', `${a.length ?? a._[0] ?? 8} ${a.type ?? 'alnum'}`]]; break;
       default: parts = [[n.name, Object.entries(a).filter(([k]) => k !== '_').map(([k, v]) => `${k}=${v}`).join('; ')]];
@@ -1284,9 +1284,13 @@
     },
     {
       id: 'zipcode', group: 'Test data', icon: 'pin', title: 'Zip code',
-      desc: 'Thai postal code with a real province prefix', keywords: 'zip postal postcode รหัสไปรษณีย์',
-      fields: [],
-      build: () => '{zipcode}',
+      desc: 'A real Thai postal code (964 codes)', keywords: 'zip postal postcode รหัสไปรษณีย์ จังหวัด',
+      fields: [
+        { key: 'province', label: 'Province', type: 'select', value: '',
+          options: () => [['', 'Any province'], ...(FB.THAI_ZIPCODES || []).map(([th, en]) => [th, `${th} (${en})`])],
+          desc: 'Only codes that exist. Pick a province when other fields (sub-district lists) depend on the code.' },
+      ],
+      build: (v) => (v.province ? `{zipcode: province=${tplArg(v.province)}}` : '{zipcode}'),
     },
     {
       id: 'bankaccount', group: 'Test data', icon: 'bank', title: 'Bank account',
@@ -1564,7 +1568,7 @@
       if (m) return { ...v, mode: 'shift', dir: m[1] === '+' ? '+' : '-', amount: m[2], unit: m[3].toLowerCase() };
       return { ...v, mode: 'today' };
     },
-    zipcode: () => ({}),
+    zipcode: (a) => ({ province: a.province ?? a._[0] ?? '' }),
     bankaccount: (a) => ({ format: a.format === 'dash' ? 'dash' : 'plain', source: a.source === 'random' ? 'random' : 'list' }),
     randomtext: (a) => ({ length: a.length ?? a._[0] ?? '8', type: a.type ?? 'alnum' }),
   };

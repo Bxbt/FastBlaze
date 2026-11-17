@@ -63,7 +63,7 @@
     date(a, ctx) {
       return FB.gen.date({ format: a.format ?? a._[0], shift: a.shift, age: a.age, now: ctx.now });
     },
-    zipcode() { return FB.gen.zipcode(); },
+    zipcode(a) { return FB.gen.zipcode({ province: a.province ?? a._[0], prefix: a.prefix }); },
     bankaccount(a, ctx) { return FB.gen.bankAccount({ format: a.format, source: a.source, allow: ctx.testData.banks }); },
     randomtext(a) { return FB.gen.randomText({ length: a.length ?? a._[0], type: a.type }); },
     formtext(a, ctx) { return formValue(a, ctx, 'text'); },
