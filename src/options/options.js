@@ -352,24 +352,36 @@
     $('f-name').select();
   }
 
-  function newFolder() {
-    const name = prompt('Folder name');
+  async function newFolder() {
+    const name = await FB.dialog.prompt({
+      title: 'New folder', label: 'Folder name', placeholder: 'e.g. Ufriend', confirmLabel: 'Create', icon: 'folder',
+    });
     if (!name) return;
-    data.folders.push({ id: FB.storage.uid(), name: name.trim(), snippets: [] });
+    data.folders.push({ id: FB.storage.uid(), name, snippets: [] });
     persist();
     renderTree();
   }
 
-  function renameFolder(f) {
-    const name = prompt('Rename folder', f.name);
+  async function renameFolder(f) {
+    const name = await FB.dialog.prompt({
+      title: 'Rename folder', label: 'Folder name', value: f.name, confirmLabel: 'Rename', icon: 'pencil',
+    });
     if (!name) return;
-    f.name = name.trim();
+    f.name = name;
     persist();
     select(selectedId);
   }
 
-  function deleteFolder(f) {
-    if (f.snippets.length && !confirm(`Delete folder "${f.name}" and its ${f.snippets.length} snippets?`)) return;
+  async function deleteFolder(f) {
+    const n = f.snippets.length;
+    const ok = await FB.dialog.confirm({
+      title: 'Delete folder',
+      message: n
+        ? ['Delete the folder ', { b: f.name }, ` and its ${n} snippet${n > 1 ? 's' : ''}? This cannot be undone.`]
+        : ['Delete the empty folder ', { b: f.name }, '?'],
+      confirmLabel: 'Delete folder', danger: true, icon: 'trash',
+    });
+    if (!ok) return;
     data.folders = data.folders.filter((x) => x !== f);
     if (findSnippet(selectedId) === null) selectedId = null;
     persist();
@@ -384,18 +396,27 @@
     renderTree();
   }
 
-  function renameSnippet(s) {
-    const name = prompt('Rename snippet', s.name);
+  async function renameSnippet(s) {
+    const name = await FB.dialog.prompt({
+      title: 'Rename snippet', label: 'Label', value: s.name, confirmLabel: 'Rename', icon: 'pencil',
+    });
     if (name == null) return;
-    s.name = name.trim();
+    s.name = name;
     persist();
     if (selectedId === s.id) select(s.id);
     else renderTree();
   }
 
-  function deleteSnippet(s) {
+  async function deleteSnippet(s) {
     const hit = findSnippet(s ? s.id : selectedId);
-    if (!hit || !confirm(`Delete "${hit.s.name || hit.s.shortcut}"?`)) return;
+    if (!hit) return;
+    const label = hit.s.name || hit.s.shortcut || '(untitled)';
+    const ok = await FB.dialog.confirm({
+      title: 'Delete snippet',
+      message: ['Are you sure you want to delete the snippet ', { b: label }, '? This cannot be undone.'],
+      confirmLabel: 'Delete snippet', danger: true, icon: 'trash',
+    });
+    if (!ok) return;
     hit.f.snippets = hit.f.snippets.filter((x) => x !== hit.s);
     persist();
     if (selectedId === hit.s.id) select(null);
@@ -418,9 +439,16 @@
       data = merged;
       await persist();
       select(selectedId);
-      alert(`Imported ${count} snippets.`);
+      await FB.dialog.alert({
+        title: 'Import complete',
+        message: ['Imported ', { b: String(count) }, ` snippet${count === 1 ? '' : 's'} from `, { b: file.name }, '.'],
+        icon: 'check',
+      });
     } catch (err) {
-      alert(`Import failed: ${err.message}`);
+      await FB.dialog.alert({
+        title: 'Import failed',
+        message: [{ b: file.name }, ` could not be imported: ${err.message}`],
+      });
     }
   }
 
