@@ -289,6 +289,7 @@
       taTouched = false;
       $('try-pop').hidden = true;
       selectedItem = -1;
+      lastOffset = null;
       highlight();
       setView(view);
       renderPreview();
@@ -652,6 +653,7 @@
     rich.replaceChildren(...nodes);
     rich.classList.toggle('empty', !ta.value);
     lastRange = null;
+    if (lastOffset != null && lastOffset > ta.value.length) lastOffset = null;
   }
 
   /** Push the editor content back into the template. */
@@ -664,9 +666,61 @@
     try { afterTextChange(); } finally { syncingFromRich = false; }
   }
 
+  // The caret is remembered as a position in the template text, so it survives the
+  // editor being re-rendered (e.g. while a command form is open on the right).
+  let lastOffset = null;
+
+  /** Template offset of a DOM position inside the editor. */
+  function offsetOf(container, offset) {
+    const r = document.createRange();
+    r.setStart(rich, 0);
+    r.setEnd(container, offset);
+    const box = document.createElement('div');
+    box.append(r.cloneContents());
+    return serializeRich(box).length;
+  }
+
+  /** Put the caret at a template offset (after re-rendering). */
+  function caretAtOffset(target) {
+    let pos = 0;
+    for (const n of rich.childNodes) {
+      let len = 0;
+      if (n.nodeType === Node.TEXT_NODE) len = escapeText(n.data.replace(ZW, '')).length;
+      else if (n.dataset && n.dataset.src != null) len = n.dataset.src.length;
+      else if (n.tagName === 'BR') len = n.classList.contains('cont') ? 2 : 1;
+      if (pos + len >= target && len) {
+        const r = document.createRange();
+        if (n.nodeType === Node.TEXT_NODE) {
+          // map template offset back to a character index (escapes take 2 chars)
+          let i = 0;
+          while (i < n.data.length && pos + escapeText(n.data.slice(0, i + 1)).length <= target) i++;
+          r.setStart(n, i);
+        } else r.setStartAfter(n);
+        r.collapse(true);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(r);
+        lastRange = r.cloneRange();
+        lastOffset = target;
+        return;
+      }
+      pos += len;
+    }
+    const r = document.createRange();
+    r.selectNodeContents(rich);
+    r.collapse(false);
+    window.getSelection().removeAllRanges();
+    window.getSelection().addRange(r);
+    lastRange = r.cloneRange();
+    lastOffset = ta.value.length;
+  }
+
   function saveRange() {
     const sel = window.getSelection();
-    if (sel.rangeCount && rich.contains(sel.getRangeAt(0).startContainer)) lastRange = sel.getRangeAt(0).cloneRange();
+    if (sel.rangeCount && rich.contains(sel.getRangeAt(0).startContainer)) {
+      lastRange = sel.getRangeAt(0).cloneRange();
+      try { lastOffset = offsetOf(lastRange.startContainer, lastRange.startOffset); } catch { /* keep old */ }
+    }
   }
 
   function placeCaretAfter(node) {
@@ -680,22 +734,16 @@
   }
 
   /** Insert template text (commands become chips) at the caret, or at the end. */
+  /** Insert template text (commands become chips) at the remembered caret, or at the end. */
   function blocksInsert(text) {
+    let at = ta.value.length;
+    if (lastRange && rich.contains(lastRange.startContainer)) {
+      try { at = offsetOf(lastRange.startContainer, lastRange.startOffset); } catch { at = lastOffset ?? at; }
+    } else if (lastOffset != null) at = Math.min(lastOffset, ta.value.length);
+    ta.value = ta.value.slice(0, at) + text + ta.value.slice(at);
+    afterTextChange(); // re-renders the editor
     rich.focus();
-    let range = lastRange;
-    if (!range || !rich.contains(range.startContainer)) {
-      range = document.createRange();
-      range.selectNodeContents(rich);
-      range.collapse(false);
-    }
-    range.deleteContents();
-    const nodes = templateNodes(text);
-    const frag = document.createDocumentFragment();
-    nodes.forEach((n) => frag.append(n));
-    const last = nodes[nodes.length - 1];
-    range.insertNode(frag);
-    if (last) placeCaretAfter(last);
-    syncFromRich();
+    caretAtOffset(at + text.length);
   }
 
   // Typing, deleting, Enter, paste
@@ -847,7 +895,7 @@
     const m = text.indexOf('«');
     const n = text.indexOf('»');
     const clean = text.replace(/[«»]/g, '');
-    setMode('edit');
+    if (mode !== 'edit') setMode('edit');
     if (view === 'blocks') {
       blocksInsert(clean);
       return;
