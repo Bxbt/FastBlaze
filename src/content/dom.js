@@ -144,16 +144,23 @@
   /** First visible element whose whole text equals `text` (deepest match wins). */
   function findByText(text, scope) {
     const want = normText(text);
-    let best = null;
-    const pool = scope
-      ? queryAllDeep(scope).flatMap((root) => [root, ...(root.shadowRoot || root).querySelectorAll('*')])
-      : document.querySelectorAll('body *');
-    for (const el of pool) {
-      if (el.tagName === 'SCRIPT' || el.tagName === 'STYLE') continue;
-      if (best && !best.contains(el)) continue; // keep the first match; only go deeper
-      if (normText(el.textContent) === want && isVisible(el)) best = el;
+    const search = (pool) => {
+      let best = null;
+      for (const el of pool) {
+        if (el.tagName === 'SCRIPT' || el.tagName === 'STYLE') continue;
+        if (best && !best.contains(el)) continue; // keep the first match; only go deeper
+        if (normText(el.textContent) === want && isVisible(el)) best = el;
+      }
+      return best;
+    };
+    if (scope) {
+      // The scope (e.g. a recorded list=) can go stale; then search the whole page.
+      let roots = [];
+      try { roots = queryAllDeep(scope); } catch { roots = []; }
+      const found = search(roots.flatMap((root) => [root, ...(root.shadowRoot || root).querySelectorAll('*')]));
+      if (found) return found;
     }
-    return best;
+    return search(document.querySelectorAll('body *'));
   }
 
   class Cancelled extends Error {
@@ -475,6 +482,8 @@
         switch (a.type) {
           case 'text':
             el = deepActiveElement();
+            // Blank text with no field to type into (e.g. a trailing line break) is harmless.
+            if (!a.value.trim() && !isEditable(el)) break;
             typeText(a.value, automation);
             break;
           case 'click': {

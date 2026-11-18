@@ -277,10 +277,26 @@
   }
 
   /** compile(template, { lookup(shortcut) -> text|null, formValues }) */
+  const STEP_TYPES = new Set(['click', 'select', 'clear', 'key', 'wait', 'idle', 'waitfor']);
+
+  /**
+   * Line breaks / spaces that only separate automation steps are layout, not text to
+   * type: "{click: ...}\n{thainame}" must not type a newline into the field. Blank
+   * text containing a newline is dropped when a step command is right before or after it.
+   */
+  function dropLayoutWhitespace(actions) {
+    return actions.filter((a, i) => {
+      if (a.type !== 'text' || !/\n/.test(a.value) || a.value.trim() !== '') return true;
+      const prev = actions[i - 1];
+      const next = actions[i + 1];
+      return !((prev && STEP_TYPES.has(prev.type)) || (next && STEP_TYPES.has(next.type)));
+    });
+  }
+
   function compile(template, opts) {
     const ctx = makeCtx(opts || {});
     runTemplate(template, ctx);
-    return { actions: mergeText(ctx.actions), errors: ctx.errors };
+    return { actions: mergeText(dropLayoutWhitespace(ctx.actions)), errors: ctx.errors };
   }
 
   /** Form fields ({formtext}, {formmenu}, ...) the user must fill before running. */
