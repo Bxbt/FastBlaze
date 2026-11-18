@@ -62,16 +62,30 @@
 
   const OPTION_ROLES = new Set(['option', 'menuitem', 'menuitemradio', 'menuitemcheckbox', 'treeitem']);
 
-  /** Is this a choice inside a dropdown / popup list (appeared after recording began)? */
-  function dropdownList(el) {
+  /** Does this element open a dropdown / popup when clicked? */
+  function isDropdownTrigger(el) {
+    if (!el || el.nodeType !== 1) return false;
+    if (el.hasAttribute('aria-haspopup') || el.hasAttribute('aria-expanded')) return true;
+    const role = el.getAttribute('role');
+    if (role === 'combobox' || role === 'listbox') return true;
+    const hint = `${el.getAttribute('data-testid') || ''} ${el.id || ''} ${typeof el.className === 'string' ? el.className : ''}`;
+    return /select|dropdown|picker|combo|menu/i.test(hint);
+  }
+
+  /**
+   * Is this a choice inside a dropdown? Yes when it has an option / menu role, or when
+   * the previous click opened something (a dropdown trigger) and the list appeared
+   * after that click. A whole page re-rendered after "Next" does not count.
+   */
+  function dropdownList(el, prevEl, prevAt) {
     let popup = false;
+    const opened = isDropdownTrigger(prevEl);
     for (let n = el; n && n !== document.body; n = parentAcross(n)) {
       const role = n.getAttribute && n.getAttribute('role');
-      if (role && (OPTION_ROLES.has(role) || role === 'listbox' || role === 'menu')) popup = true;
-      if (rec.added.has(n)) popup = true;
-      if (popup) break;
+      if (role && (OPTION_ROLES.has(role) || role === 'listbox' || role === 'menu')) { popup = true; break; }
+      if (opened && (rec.addedAt.get(n) || 0) >= prevAt) { popup = true; break; }
     }
-    if (!popup) return null;
+    if (!popup || isDropdownTrigger(el)) return null;
     const list = FB.selector.listSelector(el);
     return list && list.count >= 2 ? list.selector : null;
   }
@@ -84,9 +98,11 @@
       FB.ui.toast('FastBlaze: no reliable selector for that element (not recorded)', 'error');
       return;
     }
+    const prevEl = rec.lastClickEl;
+    const prevAt = rec.lastClickAt;
     rec.lastClickEl = el;
     rec.lastClickAt = Date.now();
-    const list = FB.dom.isEditable(el) ? null : dropdownList(el);
+    const list = FB.dom.isEditable(el) ? null : dropdownList(el, prevEl, prevAt);
     if (list) {
       push({ type: 'click', ...ref, list }, `option ${ref.text ? `"${ref.text}"` : ref.selector}`);
       return;
@@ -232,14 +248,14 @@
   function begin(opts) {
     if (rec) return;
     opts = opts || {};
-    rec = { count: opts.count || 0, local: [], pending: null, initial: new WeakMap(), added: new WeakSet(), observer: null, mutations: 0, lastClickEl: null, lastClickAt: 0, lastStepAt: 0, labelClick: null, bar: null };
+    rec = { count: opts.count || 0, local: [], pending: null, initial: new WeakMap(), addedAt: new WeakMap(), observer: null, mutations: 0, lastClickEl: null, lastClickAt: 0, lastStepAt: 0, labelClick: null, bar: null };
     for (const [type, fn] of LISTENERS) window.addEventListener(type, fn, true);
     window.addEventListener('pagehide', onPageHide);
     rec.observer = new MutationObserver((records) => {
       for (const r of records) {
         if (r.target && r.target.nodeName === 'FASTBLAZE-UI') continue;
         rec.mutations += r.addedNodes.length + r.removedNodes.length;
-        for (const n of r.addedNodes) if (n.nodeType === 1 && n.tagName !== 'FASTBLAZE-UI') rec.added.add(n);
+        for (const n of r.addedNodes) if (n.nodeType === 1 && n.tagName !== 'FASTBLAZE-UI') rec.addedAt.set(n, Date.now());
       }
     });
     rec.observer.observe(document.documentElement, { childList: true, subtree: true });

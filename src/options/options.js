@@ -593,6 +593,9 @@
     return chip;
   }
 
+  // A typed line break (Shift+Enter) shows a small marker; plain Enter is layout only.
+  const newlineMark = () => el('span', { className: 'nl-mark', contentEditable: 'false', title: 'Types a line break (Shift+Enter)', textContent: '\u21B5' });
+
   /** Template text -> DOM nodes (used for rendering and for paste). */
   function templateNodes(src) {
     const nodes = [];
@@ -602,7 +605,7 @@
       pos += t.text.length;
       if (t.kind === 'text') {
         t.text.split('\n').forEach((line, i) => {
-          if (i) nodes.push(document.createElement('br'));
+          if (i) nodes.push(newlineMark(), document.createElement('br'));
           if (line) nodes.push(document.createTextNode(line));
         });
       } else if (t.kind === 'escape') nodes.push(document.createTextNode(t.text.slice(1)));
@@ -623,7 +626,7 @@
       for (const n of node.childNodes) {
         if (n.nodeType === Node.TEXT_NODE) out += escapeText(n.data.replace(ZW, ''));
         else if (n.nodeType !== Node.ELEMENT_NODE) continue;
-        else if (n.classList.contains('drop-caret')) continue;
+        else if (n.classList.contains('drop-caret') || n.classList.contains('nl-mark')) continue;
         else if (n.dataset && n.dataset.src != null) out += n.dataset.src;
         else if (n.tagName === 'BR') {
           // Chrome adds a trailing <br> so an empty last line stays visible; ignore it.
@@ -703,7 +706,29 @@
   rich.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      document.execCommand('insertLineBreak');
+      if (e.shiftKey) {
+        // Typed line break: marker + real <br>
+        const sel = window.getSelection();
+        if (!sel.rangeCount) return;
+        const r = sel.getRangeAt(0);
+        r.deleteContents();
+        const br = document.createElement('br');
+        r.insertNode(br);
+        r.insertNode(newlineMark());
+        placeCaretAfter(br);
+      } else {
+        // Layout only: a "\" continuation, never typed into the page
+        const sel = window.getSelection();
+        if (!sel.rangeCount) return;
+        const r = sel.getRangeAt(0);
+        r.deleteContents();
+        const br = el('br', { className: 'cont' });
+        const zw = document.createTextNode('\u200B');
+        r.insertNode(zw);
+        r.insertNode(br);
+        placeCaretAfter(br);
+      }
+      syncFromRich();
     }
   });
   rich.addEventListener('paste', (e) => {

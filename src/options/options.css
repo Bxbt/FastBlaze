@@ -415,7 +415,7 @@ dialog#settings { width: min(560px, calc(100vw - 32px)); max-height: calc(100vh 
   font-size: 15px; line-height: 2.15; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--fg);
   caret-color: var(--focus);
 }
-.blocks.empty::before { content: 'Text that will be inserted when the shortcut is typed\2026'; color: var(--muted); pointer-events: none; position: absolute; }
+.blocks.empty::before { content: 'Text that will be inserted when the shortcut is typed\2026   (Enter = new line here only, Shift+Enter = type a line break)'; color: var(--muted); pointer-events: none; position: absolute; }
 .drop-caret { display: inline-block; width: 2px; height: 1.4em; margin: 0 1px; background: var(--flame); vertical-align: middle; border-radius: 1px; }
 .blk {
   position: relative; display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
@@ -466,3 +466,5 @@ dialog#settings { width: min(560px, calc(100vw - 32px)); max-height: calc(100vh 
 
 .blk-cmd.blk-option { border-color: #f59e0b; border-style: dashed; }
 .blk-cmd.blk-option .icon-wrap { color: #d97706; }
+
+.nl-mark { color: var(--muted); font-size: 12px; margin-left: 2px; user-select: none; }

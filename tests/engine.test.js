@@ -255,3 +255,16 @@ test('list= marks dropdown options: scopes text, or is the list for pick', () =>
     { type: 'click', selector: '.opts > div', pick: 'next' },
   ]);
 });
+
+test('newlines between steps are layout, not typed text', () => {
+  const tpl = '{click: selector=#first}\n{thaiid}\\\n{click: selector=#addr}\n  \n{thaiid: format=dash}\n{click: selector=#ok}\n';
+  const r = FB.compile(tpl);
+  assert.deepEqual(r.errors, []);
+  assert.deepEqual(r.actions.map((a) => a.type), ['click', 'text', 'click', 'text', 'click']);
+  assert.ok(r.actions.filter((a) => a.type === 'text').every((a) => !a.value.includes('\n')));
+  // real multi-line text is still typed
+  const t = FB.compile('{click: selector=#notes}line 1\nline 2').actions[1].value;
+  assert.equal(t, 'line 1\nline 2');
+  // plain text snippets keep their blank lines
+  assert.equal(FB.compile('Dear team,\n\nThanks').actions[0].value, 'Dear team,\n\nThanks');
+});
