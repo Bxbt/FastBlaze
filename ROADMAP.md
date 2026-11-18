@@ -66,7 +66,7 @@
 
 ## Phase 7 — Packaging
 
-- [ ] Icon, version bump script, `npm run zip`
+- [x] Icon, `npm run zip` (checks referenced files, excludes tests / dev files)
 - [ ] (ถ้าต้องการให้ทีมใช้) Chrome Web Store แบบ Unlisted หรือแจก zip + Load unpacked
 
 ---

@@ -4,6 +4,15 @@ Personal Chrome extension (MV3) for test-form work:
 snippets, Thai test ID generator, and click automation. Reads/writes the
 common snippet export format (v7 JSON: folders → snippets), so existing snippets import unchanged.
 
+## Install from a zip (for the team)
+
+1. Unzip `fastblaze-<version>.zip` into a folder that will stay put (Chrome loads it from there)
+2. `chrome://extensions` → enable **Developer mode** → **Load unpacked** → pick that folder
+3. To update: replace the folder contents with the new zip, then click ↻ on the FastBlaze card
+
+Build the zip with `npm run zip` → `dist/fastblaze-<version>.zip` (only `manifest.json`, `icons/`, `src/`;
+the script fails if a file referenced by the manifest or pages is missing).
+
 ## Install (unpacked)
 
 1. `chrome://extensions` → enable **Developer mode**
